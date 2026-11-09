@@ -1,0 +1,4 @@
+[
+  {"title": "Example song", "artists": ["Example artist"], "album": "Example album", "duration_ms": 180000},
+  {"title": "Another example", "artists": ["Example artist", "Guest artist"], "album": "Example album", "duration_ms": 210000}
+]
