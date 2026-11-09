@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      MUSICMATCHER_DATA_DIR: ${{ runner.temp }}/musicmatcher-release-test-data
+      MUSICMATCHER_DATA_DIR: ${{ github.workspace }}/.musicmatcher/release-test-data
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v7

@@ -19,7 +19,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ['3.11', '3.12']
     env:
-      MUSICMATCHER_DATA_DIR: ${{ runner.temp }}/musicmatcher-test-data
+      MUSICMATCHER_DATA_DIR: ${{ github.workspace }}/.musicmatcher/test-data
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v7
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      MUSICMATCHER_DATA_DIR: ${{ runner.temp }}/musicmatcher-audio-test-data
+      MUSICMATCHER_DATA_DIR: ${{ github.workspace }}/.musicmatcher/audio-test-data
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v7
