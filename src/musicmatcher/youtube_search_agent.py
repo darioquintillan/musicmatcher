@@ -40,7 +40,8 @@ def _fingerprint(track: dict[str, Any]) -> str:
 
 def _cache_fingerprint(track: dict[str, Any], settings: Any) -> str:
     identity = {"metadata": _fingerprint(track), "algorithm": ALGORITHM_VERSION,
-                "candidate_limit": getattr(settings, "candidate_limit", 8)}
+                "candidate_limit": getattr(settings, "candidate_limit", 8),
+                "matching_mode": getattr(settings, "matching_mode", "relaxed")}
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
@@ -150,7 +151,8 @@ def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None
     return candidates
 
 
-def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, retry_failed=True, refresh=False) -> dict[str, Any]:
+def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, retry_failed=True, refresh=False,
+                  track_limit: int | None = None) -> dict[str, Any]:
     if settings is None:
         from .config_manager import Settings
         settings = Settings()
@@ -159,7 +161,9 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
         raise ValueError("El número de candidatos debe estar entre 1 y 25.")
     path = Path(state_path)
     state = load_state(path)
-    tracks = state["tracks"]
+    if track_limit is not None and (isinstance(track_limit, bool) or not isinstance(track_limit, int) or track_limit < 1):
+        raise ValueError("El límite de canciones debe ser un entero positivo.")
+    tracks = state["tracks"][:track_limit] if track_limit is not None else state["tracks"]
     started = utc_now()
     summary = {"searched": 0, "reused": 0, "skipped": 0, "errors": 0, "paused": False, "started_at": started}
     state["search_summary"] = summary
@@ -213,7 +217,7 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
                                                     progress=lambda event: emit(index, title=title, **event))
                 candidates = _json_safe(candidates)
                 _check_stop(stop_event)
-                decision = choose_match(track, candidates)
+                decision = choose_match(track, candidates, mode=getattr(settings, "matching_mode", "relaxed"))
                 candidate_errors = [{"id": item.get("id"), "reason": item.get("unavailable_reason"),
                                      "message": item["metadata_error"]}
                                     for item in candidates if item.get("metadata_error")]

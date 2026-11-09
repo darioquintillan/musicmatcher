@@ -89,6 +89,21 @@ def test_permission_is_bound_to_actual_url_and_note(tmp_path, monkeypatch):
     fetch.assert_not_called()
 
 
+def test_download_first_ten_does_not_touch_other_authorized_tracks(tmp_path, monkeypatch):
+    tracks = [track(f"song-{n}", n) for n in range(1, 13)]
+    for n, current in enumerate(tracks, 1):
+        current["title"] = f"Song {n}"
+    untouched = copy.deepcopy(tracks[10:])
+    state, links = inputs(tmp_path, tracks)
+    fake_environment(monkeypatch)
+    fetch = MagicMock(side_effect=fake_audio)
+    monkeypatch.setattr(audio, "_download_audio", fetch)
+    result = audio.download_tracks(state, links, tmp_path / "out", track_limit=10)
+    assert fetch.call_count == 10
+    assert result["last_download"]["total"] == 10
+    assert result["tracks"][10:] == untouched
+
+
 def test_manually_edited_mapping_does_not_override_accepted_match(tmp_path, monkeypatch):
     first = track()
     state, links = inputs(tmp_path, [first])

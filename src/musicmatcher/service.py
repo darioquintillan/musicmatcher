@@ -153,16 +153,18 @@ class Workspace:
             self.stop_event.clear()
             self.started = time.monotonic()
             state = self.state()
+            selected_tracks = state["tracks"][:request["track_limit"]] if request.get("track_limit") else state["tracks"]
             if action in {"search", "download", "run"} and not state["tracks"] and not (
                 request.get("spotify_url") or request.get("content") is not None
             ):
                 raise ValueError("Importa primero una playlist de Spotify o un archivo CSV/JSON.")
             stage = "import" if action.startswith("import") else "search" if action in {"search", "run"} else "download"
             self.baseline = (sum(t.get("match", {}).get("status") in {"accepted", "review", "unmatched", "unavailable"}
-                                 for t in state["tracks"]) if stage == "search" else 0)
-            self.job.update(status="running", stage=stage, done=self.baseline, total=len(state["tracks"]),
+                                 for t in selected_tracks) if stage == "search" else 0)
+            self.job.update(status="running", stage=stage, done=self.baseline, total=len(selected_tracks),
                             message="Preparando el proceso…", current_title="", started_at=utc_now(),
-                            elapsed_seconds=0, eta_seconds=None, error=None, candidate_done=0, candidate_total=0)
+                            elapsed_seconds=0, eta_seconds=None, error=None, candidate_done=0, candidate_total=0,
+                            track_limit=request.get("track_limit"), finished_at=None)
             atomic_json(self.data_dir / "job.json", self.job)
             config = self.settings.model_copy(deep=True)
             self.thread = threading.Thread(target=self._work, args=(deepcopy(request), config), daemon=True,
@@ -197,21 +199,31 @@ class Workspace:
                 if action in {"search", "run"}:
                     from .youtube_search_agent import search_tracks
                     state = search_tracks(self.state_path, settings=settings, progress=self.progress,
-                                          stop_event=self.stop_event, refresh=bool(request.get("refresh")))
+                                          stop_event=self.stop_event, refresh=bool(request.get("refresh")),
+                                          **({"track_limit": request["track_limit"]} if request.get("track_limit") else {}))
                     if state.get("search_summary", {}).get("paused"):
                         self.stop_event.set()
                 if action in {"download", "run"} and not self.stop_event.is_set():
                     from .audio_downloader import download_tracks
                     export_results(self.state_path)
                     download_tracks(self.state_path, self.links_path, Path(settings.output_dir), settings.bitrate,
-                                    settings.ffmpeg_location, progress=self.progress, stop_event=self.stop_event)
+                                    settings.ffmpeg_location, progress=self.progress, stop_event=self.stop_event,
+                                    **({"track_limit": request["track_limit"]} if request.get("track_limit") else {}))
                 if self.state_path.is_file():
                     export_results(self.state_path)
             with self.lock:
                 paused = self.stop_event.is_set()
+                message = "Proceso terminado. Revisa las canciones pendientes cuando quieras."
+                if not paused and action in {"download", "run"}:
+                    selected = self.state()["tracks"]
+                    if request.get("track_limit"):
+                        selected = selected[:request["track_limit"]]
+                    missing = sum(t.get("download", {}).get("status") == "authorization_required" for t in selected)
+                    if missing:
+                        message = f"Búsqueda terminada. {missing} canciones necesitan permiso de descarga."
                 self.job.update(status="paused" if paused else "completed",
                                 message="Proceso pausado. Puedes reanudar sin perder resultados." if paused else
-                                        "Proceso terminado. Revisa las canciones pendientes cuando quieras.",
+                                        message,
                                 finished_at=utc_now())
                 if not paused and action.startswith("import"):
                     total = len(self.state()["tracks"])

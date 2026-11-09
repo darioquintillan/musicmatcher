@@ -35,6 +35,7 @@ def parser() -> argparse.ArgumentParser:
     for command in (search, run):
         command.add_argument("--candidates", type=int, choices=range(1, 26), metavar="1..25")
         command.add_argument("--refresh", action="store_true")
+        command.add_argument("--matching-mode", choices=("strict", "relaxed"))
     review = sub.add_parser("review", help="Mostrar canciones pendientes y candidatos")
     review.add_argument("--key")
     accept = sub.add_parser("accept", help="Asignar manualmente un enlace")
@@ -48,6 +49,8 @@ def parser() -> argparse.ArgumentParser:
     for command in (download, run):
         command.add_argument("--output", type=Path)
         command.add_argument("--bitrate", type=int, choices=(64, 96, 128, 160, 192, 224, 256, 320))
+    for command in (search, download, run):
+        command.add_argument("--first", type=int, help="Procesar solo las primeras N canciones del catálogo")
     sub.add_parser("export", help="Exportar mapping.json y canciones.json")
     sub.add_parser("doctor", help="Comprobar configuración y ejecutables")
     sub.add_parser("summary", help="Mostrar progreso guardado")
@@ -105,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
         changes = {}
         if getattr(args, "candidates", None) is not None:
             changes["candidate_limit"] = args.candidates
+        if getattr(args, "matching_mode", None) is not None:
+            changes["matching_mode"] = args.matching_mode
         if getattr(args, "output", None) is not None:
             changes["output_dir"] = str(args.output)
         if getattr(args, "bitrate", None) is not None:
@@ -121,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
             request["spotify_url"] = args.url
         if getattr(args, "refresh", False):
             request["refresh"] = True
+        if getattr(args, "first", None) is not None:
+            if not 1 <= args.first <= 10000:
+                raise ValueError("--first debe estar entre 1 y 10000.")
+            request["track_limit"] = args.first
         workspace.start(request)
         seen = 0
         while workspace.thread and workspace.thread.is_alive():

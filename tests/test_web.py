@@ -47,6 +47,7 @@ def test_local_ui_config_import_review_exports(client):
     assert browser.get("/").headers["x-frame-options"] == "DENY"
     bootstrap = browser.get("/api/bootstrap").json()
     assert bootstrap["config"]["candidate_limit"] == 8
+    assert bootstrap["config"]["matching_mode"] == "relaxed"
     assert "api_key" not in bootstrap["config"]
     assert browser.post("/api/config", json={"candidate_limit": 3}).status_code == 200
     assert load_settings(workspace.data_dir).candidate_limit == 3
@@ -133,6 +134,17 @@ def test_sse_first_event_is_snapshot_not_fake_progress(client):
 def test_cannot_start_processing_without_catalog(client):
     browser, _workspace = client
     assert browser.post("/api/jobs", json={"action": "search"}).status_code == 400
+
+
+def test_first_track_limit_is_validated_and_forwarded_to_worker(client):
+    browser, workspace = client
+    import_example(browser)
+    assert browser.post("/api/jobs", json={"action": "search", "track_limit": 0}).status_code == 422
+    with patch("musicmatcher.youtube_search_agent.search_tracks", return_value=workspace.state()) as search:
+        assert browser.post("/api/jobs", json={"action": "search", "track_limit": 1}).status_code == 202
+        assert wait(browser)["job"]["status"] == "completed"
+    assert search.call_args.kwargs["track_limit"] == 1
+    assert len(workspace.state()["tracks"]) == 2
 
 
 def test_configuration_persists_without_any_model_secrets(tmp_path):

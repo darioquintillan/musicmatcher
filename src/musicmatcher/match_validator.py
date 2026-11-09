@@ -10,7 +10,7 @@ from typing import Any
 
 from .mapping_manager import canonical_youtube_url
 
-ALGORITHM_VERSION = "2.0"
+ALGORITHM_VERSION = "3.1"
 ACCEPT_SCORE = 92.0
 MIN_MARGIN = 5.0
 _MULTI_TRACK = re.compile(r"\b(?:medley|popurri|multiple tracks|multiple songs|two songs|two tracks|tracklist|track list)\b")
@@ -27,12 +27,13 @@ def normalize(value: str | None) -> str:
 _PROMO = re.compile(
     r"^(?:official\s+)?(?:audio|video|music video|lyric video|lyrics|visuali[sz]er)"
     r"(?:\s+official)?$|^(?:official|hd|hq|4k|1080p|720p)$"
+    r"|^(?:audio|video|videoclip|letra|lyrics)(?:\s*(?:oficial|official))?$"
 )
 _VERSION_WORDS = {
     "remix": r"\bremix(?:ed)?\b",
-    "live": r"\blive(?:\s+(?:at|from|in|version|performance))?\b|\bin concert\b",
+    "live": r"\blive(?:\s+(?:at|from|in|version|performance))?\b|\bin concert\b|\b(?:en vivo|en directo|vivo|directo)\b",
     "cover": r"\bcover\b",
-    "acoustic": r"\bacoustic\b|\bunplugged\b",
+    "acoustic": r"\bacoustic\b|\bunplugged\b|\bacustic[oa]\b",
     "instrumental": r"\binstrumental\b",
     "karaoke": r"\bkaraoke\b",
     "sped_up": r"\bsped up\b|\bspeed up\b|\bnightcore\b",
@@ -129,7 +130,7 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def evaluate_candidate(track: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+def _evaluate_strict(track: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     """Return score, evidence and hard rejections; scores are not probabilities."""
     reasons: list[str] = []
     warnings: list[str] = []
@@ -322,13 +323,191 @@ def evaluate_candidate(track: dict[str, Any], candidate: dict[str, Any]) -> dict
     }
 
 
-def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def _phrase(needle: str, haystack: str) -> bool:
+    return bool(needle and re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", haystack))
+
+
+def _title_evidence(track: dict[str, Any], candidate: dict[str, Any]) -> tuple[float, bool]:
+    """Recognize credits/album/promo around a title without accepting an unrelated suffix."""
+    original = str(track.get("title") or "")
+    expected, expected_versions = _parts(original, original)
+    musical, _ = _parts(str(candidate.get("track") or ""), original)
+    displayed, _ = _parts(str(candidate.get("title") or ""), original)
+    artists = [normalize(a) for a in track.get("artists", [])]
+    album = normalize(str(track.get("album") or ""))
+
+    def compare(value: str) -> tuple[float, bool]:
+        if value == expected:
+            return 1.0, False
+        match = re.search(r"(?<!\w)" + re.escape(expected) + r"(?!\w)", value) if expected else None
+        if match:
+            extra = value[:match.start()] + " " + value[match.end():]
+            for credit in sorted(artists + ([album] if album else []), key=len, reverse=True):
+                if credit:
+                    extra = re.sub(r"(?<!\w)" + re.escape(credit) + r"(?!\w)", " ", extra)
+            extra = re.sub(r"\b(?:prod|produced|producido)\b.*$", " ", extra)
+            for kind in expected_versions:
+                extra = re.sub(_VERSION_WORDS[kind], " ", extra)
+            extra = re.sub(r"\b(?:x|ft|feat|featuring|con|and|y|official|oficial|audio|video|"
+                           r"videoclip|music|letra|lyrics|visualizer|visualiser|hd|hq|4k|vhs|version)\b", " ", extra)
+            return 1.0, bool(extra.strip())
+        # Small spelling or credit-format differences are tolerable for long titles.
+        parts = [value] + re.split(r"\s+[-–—|]\s+", str(candidate.get("title") or ""))
+        for artist in artists:
+            if value.startswith(artist + " "):
+                parts.append(value[len(artist):].strip())
+            if value.endswith(" " + artist):
+                parts.append(value[:-len(artist)].strip())
+        return max((_similarity(expected, normalize(part)) for part in parts), default=0.0), False
+
+    visible_score, visible_extra = compare(displayed)
+    music_score, music_extra = compare(musical) if musical else (0.0, False)
+    if musical:
+        return music_score, music_extra or visible_extra or (visible_score < 0.65)
+    return visible_score, visible_extra
+
+
+def _identifying_numbers(value: str) -> tuple[tuple[float, ...], tuple[str, ...]]:
+    normalized = normalize(value)
+    numbers = tuple(float(n.replace(",", ".")) for n in re.findall(r"\b\d+(?:[.,]\d+)?\b", value))
+    romans = tuple(re.findall(r"\b(?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\b", normalized))
+    return numbers, romans
+
+
+def _evaluate_relaxed(track: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    result = _evaluate_strict(track, candidate)
+    original_reasons = result["reasons"]
+    reasons: list[str] = []
+    warnings = list(result["warnings"])
+    review = False
+    hard = [reason for reason in original_reasons if reason.startswith((
+        "version_mismatch:", "explicit_version_contradiction", "invalid_youtube_url",
+        "video_unavailable", "live_stream_or_upcoming",
+    ))]
+    # A known different remix/remaster remains a different recording in flexible mode.
+    hard.extend(reason for reason in original_reasons if reason.startswith("version_detail_uncertain:")
+                and result["rejected"])
+    source_core, source_versions = _parts(str(track.get("title") or ""), str(track.get("title") or ""))
+    visible = normalize(str(candidate.get("title") or "") + " " + str(candidate.get("track") or ""))
+    # A bare "Song Remix | Album" is a matching generic remix even though the
+    # display parser cannot isolate it as a parenthetical or final suffix.
+    for kind in source_versions:
+        if kind in {"remix", "remaster", "extended", "radio_edit"} and not _version_detail(source_versions[kind], kind):
+            extra = re.sub(r"(?<!\w)" + re.escape(source_core) + r"(?!\w)", " ", visible)
+            if _phrase(source_core, visible) and re.search(_VERSION_WORDS[kind], extra):
+                hard = [reason for reason in hard if reason not in {
+                    f"version_mismatch:{kind}", f"version_detail_uncertain:{kind}"
+                }]
+    for reason in original_reasons:
+        if reason.startswith(("album_version_requires_review:", "version_detail_uncertain:")) and reason not in hard:
+            warnings.append(reason)
+        if reason in {"structured_artist_metadata_missing", "structured_track_metadata_missing",
+                      "explicit_version_requires_review", "additional_artist_requires_review"}:
+            warnings.append(reason)
+        if reason in {"description_suggests_multiple_tracks", "clean_version_requires_review"}:
+            reasons.append(reason)
+            review = True
+
+    title_score, unexplained_title = _title_evidence(track, candidate)
+    if title_score < 0.72:
+        hard.append("title_mismatch")
+    elif title_score < 0.86 or unexplained_title:
+        reasons.append("title_uncertain")
+        review = True
+    else:
+        reasons.append("title_matches_flexibly")
+
+    source_title, _ = _parts(str(track.get("title") or ""), str(track.get("title") or ""))
+    observed_title, _ = _parts(str(candidate.get("track") or candidate.get("title") or ""),
+                               str(track.get("title") or ""))
+    expected_numbers, expected_romans = _identifying_numbers(source_title)
+    actual_numbers, actual_romans = _identifying_numbers(observed_title)
+    if expected_numbers and actual_numbers and expected_numbers != actual_numbers:
+        hard.append("numbered_work_mismatch")
+    if expected_romans and actual_romans and expected_romans != actual_romans:
+        hard.append("numbered_movement_mismatch")
+
+    source_artists = [normalize(a) for a in track.get("artists", []) if a]
+    actual_artists = _artists(candidate)
+    text = normalize(" ".join(str(candidate.get(name) or "") for name in ("title", "channel", "uploader")))
+    primary = source_artists[0] if source_artists else ""
+    primary_credit = any(primary == artist for artist in actual_artists) if primary else False
+    primary_text = _phrase(primary, text)
+    if primary_credit:
+        artist_score = 1.0
+        reasons.append("primary_artist_credited")
+    elif primary_text and not actual_artists:
+        artist_score = 0.95
+        reasons.append("primary_artist_in_title_or_channel")
+    elif primary_text and actual_artists:
+        artist_score = 0.78
+        reasons.append("structured_artist_conflicts_with_text")
+        review = True
+    elif source_artists and any(_phrase(artist, text) for artist in source_artists[1:]):
+        artist_score = 0.7
+        reasons.append("only_collaborator_identified")
+        review = True
+    else:
+        artist_score = max((_similarity(primary, artist) for artist in actual_artists), default=0.0)
+        if actual_artists and artist_score < 0.65:
+            hard.append("artist_mismatch")
+        else:
+            reasons.append("artist_not_identified")
+            review = True
+    missing_guests = [artist for artist in source_artists[1:]
+                      if artist not in actual_artists and not _phrase(artist, text)]
+    if missing_guests:
+        warnings.append("some_collaborators_not_credited")
+        artist_score = max(0, artist_score - 0.05)
+    if primary_credit and any(artist not in source_artists for artist in actual_artists):
+        warnings.append("additional_artist_credit")
+
+    expected_ms = track.get("duration_ms")
+    duration = candidate.get("duration")
+    difference = None
+    duration_score = 0.0
+    if (isinstance(expected_ms, (int, float)) and not isinstance(expected_ms, bool)
+            and math.isfinite(expected_ms) and expected_ms > 0
+            and isinstance(duration, (int, float)) and not isinstance(duration, bool)
+            and math.isfinite(duration) and duration > 0):
+        expected = expected_ms / 1000
+        difference = abs(duration - expected)
+        tolerance = max(12.0, expected * 0.05)
+        duration_score = max(0, 1 - difference / (tolerance * 2))
+        if difference > tolerance:
+            hard.append("duration_mismatch")
+        else:
+            reasons.append("duration_within_flexible_tolerance")
+    else:
+        reasons.append("duration_unknown")
+        review = True
+
+    official = bool(candidate.get("channel_is_verified")) or "official_channel_hint_only" in original_reasons
+    score = round(45 * title_score + 30 * artist_score + 20 * duration_score + (5 if official else 0), 2)
+    if unexplained_title:
+        score = max(0, score - 5)
+    return {**result, "score": score, "eligible": not hard and not review,
+            "rejected": bool(hard), "review_required": review,
+            "reasons": list(dict.fromkeys(hard + reasons)), "warnings": list(dict.fromkeys(warnings)),
+            "title_similarity": round(title_score, 4), "artist_similarity": round(artist_score, 4),
+            "duration_difference_seconds": round(difference, 3) if difference is not None else None}
+
+
+def evaluate_candidate(track: dict[str, Any], candidate: dict[str, Any], *, mode: str = "strict") -> dict[str, Any]:
+    if mode == "relaxed":
+        return _evaluate_relaxed(track, candidate)
+    if mode != "strict":
+        raise ValueError("Modo de coincidencia no válido.")
+    return _evaluate_strict(track, candidate)
+
+
+def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]], *, mode: str = "strict") -> dict[str, Any]:
     """Accept only a strong, unambiguous candidate; preserve all decision evidence."""
     seen: set[str] = set()
     scored: list[dict[str, Any]] = []
     for candidate in candidates:
         candidate = _json_safe(candidate)
-        evaluation = evaluate_candidate(track, candidate)
+        evaluation = evaluate_candidate(track, candidate, mode=mode)
         identity = evaluation["url"] or str(candidate.get("id") or candidate.get("title"))
         if identity in seen:
             continue
@@ -340,6 +519,7 @@ def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]]) -> dic
         "algorithm_version": ALGORITHM_VERSION,
         "candidates": scored, "reasons": ["no_candidates" if not scored else "all_candidates_rejected"],
         "decision": "automatic",
+        "matching_mode": mode,
     }
     plausible = [item for item in scored if not item["rejected"]]
     if not plausible:
@@ -348,11 +528,19 @@ def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]]) -> dic
     best = plausible[0]
     result["score"] = best["score"]
     result["reasons"] = list(best["reasons"])
-    if not best["eligible"] or best["score"] < ACCEPT_SCORE:
+    threshold = 78.0 if mode == "relaxed" else ACCEPT_SCORE
+    if not best["eligible"] or best["score"] < threshold:
         result["reasons"].append("insufficient_evidence_for_automatic_selection")
         return result
-    if len(plausible) > 1 and best["score"] - plausible[1]["score"] < MIN_MARGIN:
+    equivalent_uploads = (mode == "relaxed" and len(plausible) > 1 and all(
+        item["eligible"] and item["title_similarity"] >= 0.98 and item["artist_similarity"] >= 0.9
+        and (item["duration_difference_seconds"] or 0) <= 4 for item in plausible[:2]
+    ))
+    margin = 2.0 if mode == "relaxed" else MIN_MARGIN
+    if len(plausible) > 1 and best["score"] - plausible[1]["score"] < margin and not equivalent_uploads:
         result["reasons"].append("ambiguous_candidates")
         return result
-    result.update(status="accepted", url=best["url"], reasons=["strong_metadata_match"])
+    result.update(status="accepted", url=best["url"], reasons=["flexible_metadata_match" if mode == "relaxed" else "strong_metadata_match"])
+    if equivalent_uploads:
+        result["reasons"].append("equivalent_metadata_uploads")
     return result

@@ -219,7 +219,9 @@ class MetadataManager:
         expected_ms = track.get("duration_ms")
         if expected_ms and expected_ms > 0:
             expected = expected_ms / 1000
-            if abs(duration - expected) > max(5, expected * 0.02):
+            flexible = track.get("match", {}).get("matching_mode") == "relaxed"
+            tolerance = max(12, expected * 0.05) if flexible else max(5, expected * 0.02)
+            if abs(duration - expected) > tolerance:
                 raise MetadataError("Duración incompatible: el MP3 podría estar incompleto.")
         tags = {name.lower(): value for name, value in probe.get("format", {}).get("tags", {}).items()}
         artists = track.get("artists", [])

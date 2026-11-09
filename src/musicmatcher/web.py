@@ -29,6 +29,7 @@ class JobRequest(BaseModel):
     filename: str = Field(default="playlist.csv", max_length=255)
     replace: bool = False
     refresh: bool = False
+    track_limit: int | None = Field(default=None, ge=1, le=10000)
 
 
 class ReviewRequest(BaseModel):

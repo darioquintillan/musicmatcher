@@ -99,6 +99,21 @@ The repository does not supply a shared Spotify application or credentials. Musi
 
 ## CLI
 
+### Flexible matching and bounded trial runs
+
+The app now defaults to **Flexible** matching. It accepts uploader titles containing credits, album names and promotional labels without requiring structured musical metadata. Duration tolerance is `max(12 seconds, 5%)`. Missing explicit/clean evidence is a warning; known contradictions, incompatible versions, unavailable links and different numbered works remain rejected.
+
+Flexible selection requires a score of at least 78 and a 2-point margin, except for uploads with equivalent metadata. Scores are not probabilities. The previous **Strict** mode remains selectable in the web interface.
+
+Use “Procesar primeras canciones” to limit a trial to the first N rows while preserving the entire catalog. Leave it empty for all rows. The CLI equivalent is:
+
+```bash
+musicmatcher search --candidates 3 --matching-mode relaxed --first 10 --refresh
+musicmatcher download --first 10
+```
+
+Download permissions are still separate and bound to each selected URL. Audio validation follows the selected duration tolerance and retains corruption/truncation checks.
+
 ```bash
 musicmatcher import songs.csv
 musicmatcher spotify "https://open.spotify.com/playlist/YOUR_PLAYLIST_ID"

@@ -150,12 +150,16 @@ def _write_playlist(output_dir: Path, completed: list[tuple[int, int, dict, Path
 
 
 def download_tracks(state_path: Path, links_path: Path, output_dir: Path, bitrate: int = 320,
-                    ffmpeg_location: str | None = None, *, progress=None, stop_event=None) -> dict:
+                    ffmpeg_location: str | None = None, *, progress=None, stop_event=None,
+                    track_limit: int | None = None) -> dict:
     if bitrate not in BITRATES:
         raise ValueError("Bitrate MP3 no admitido.")
     state_path, links_path = Path(state_path), Path(links_path)
     output_dir = Path(output_dir).expanduser().resolve()
     state = load_state(state_path)
+    if track_limit is not None and (isinstance(track_limit, bool) or not isinstance(track_limit, int) or track_limit < 1):
+        raise ValueError("El límite de canciones debe ser un entero positivo.")
+    tracks = state["tracks"][:track_limit] if track_limit is not None else state["tracks"]
     with links_path.open(encoding="utf-8-sig") as stream:
         links = json.load(stream)
     if not isinstance(links, dict) or any(not isinstance(k, str) or not isinstance(v, str)
@@ -167,11 +171,11 @@ def download_tracks(state_path: Path, links_path: Path, output_dir: Path, bitrat
     metadata = MetadataManager(ffmpeg_location)
     checked = False
     completed = []
-    total = sum(track["key"] in links for track in state["tracks"])
+    total = sum(track["key"] in links for track in tracks)
     done = 0
     interrupted = False
     _notify(progress, done, total, "Preparando descarga…")
-    for index, track in enumerate(state["tracks"]):
+    for index, track in enumerate(tracks):
         if _stopped(stop_event):
             interrupted = True
             break

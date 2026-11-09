@@ -131,6 +131,7 @@
   function applyConfig(config) {
     state.config = {...state.config, ...config};
     $("candidate-limit").value = state.config.candidate_limit ?? 8;
+    $("matching-mode").value = state.config.matching_mode || "relaxed";
     $("source-client-id").value = state.config.spotify_client_id || "";
     $("source-redirect-uri").value = state.config.spotify_redirect_uri || "http://127.0.0.1:8888/callback";
   }
@@ -225,6 +226,7 @@
     const result = await api("/api/bootstrap");
     if (!result.csrf_token) throw new Error("El servidor no ha proporcionado el token de la sesión local.");
     state.token = result.csrf_token;
+    if (!state.ready) $("track-limit").value = result.snapshot?.job?.track_limit || "";
     state.ready = true;
     applyConfig(result.config || {});
     renderSnapshot(result.snapshot || {});
@@ -370,11 +372,17 @@
     try {
       const hasCatalog = count(state.snapshot.catalog?.total) > 0;
       let payload = {action};
+      if (["search", "download", "run"].includes(action) && $("track-limit").value.trim()) {
+        const limit = Number($("track-limit").value);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 10000) throw new Error("El lote debe tener entre 1 y 10000 canciones.");
+        payload.track_limit = limit;
+      }
       if (action === "import_spotify" || action === "import_file" || (action === "run" && !hasCatalog)) {
         payload = {...payload, ...importPayload()};
         if (hasCatalog && !payload.replace) throw new Error("Ya tienes un catálogo. Marca «Sustituir el catálogo actual» para importar otro.");
       }
       const config = sourceConfig();
+      config.matching_mode = $("matching-mode").value;
       state.submitting = true;
       updateControls();
       $("error-banner").hidden = true;

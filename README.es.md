@@ -99,6 +99,21 @@ El repositorio no aporta una aplicación compartida ni credenciales de Spotify. 
 
 ## CLI
 
+### Reglas flexibles y pruebas por lotes
+
+La aplicación utiliza ahora el modo **Flexible** por defecto. Admite títulos con créditos de colaboradores, nombres de álbum y etiquetas promocionales, sin exigir metadatos musicales estructurados de YouTube. La duración admite `max(12 segundos, 5 %)`. No conocer el indicador explícito/censurado genera una advertencia; una contradicción conocida sigue descartándose. También se mantienen los descartes de versiones incompatibles, intérpretes contradictorios, enlaces no accesibles y números de obra distintos.
+
+La selección flexible exige al menos 78 puntos y 2 de ventaja frente a alternativas, salvo publicaciones con metadatos equivalentes. Las puntuaciones no son probabilidades. El modo **Estricto** anterior sigue disponible en «Reglas de coincidencia».
+
+El campo «Procesar primeras canciones» permite probar un lote sin eliminar el resto del catálogo. Vacío significa toda la lista. En CLI:
+
+```bash
+musicmatcher search --candidates 3 --matching-mode relaxed --first 10 --refresh
+musicmatcher download --first 10
+```
+
+La segunda fase sigue exigiendo autorización de descarga vinculada a cada URL. Reducir las reglas musicales no concede esos permisos. La validación de duración del MP3 utiliza el margen del modo seleccionado, además de comprobar el audio y detectar truncamientos.
+
 ```bash
 musicmatcher import canciones.csv
 musicmatcher spotify "https://open.spotify.com/playlist/ID_DE_TU_PLAYLIST"

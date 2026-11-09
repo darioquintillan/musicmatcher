@@ -2,6 +2,15 @@
 
 Changes are recorded by release. Dates identify planned/local source versions, not a claim that a release has been published remotely.
 
+## Unreleased
+
+- Added a flexible matching profile as the app default while retaining the previous strict rules as an option.
+- Accept missing structured music metadata, collaborator/album/producer credits and unknown explicit flags as warnings when other evidence matches; retain rejection of known incompatible recordings.
+- Recognize Spanish live/acoustic labels and generic remix labels before an album suffix.
+- Added bounded first-N searches/downloads in the web interface, API and CLI without truncating the catalog.
+- Added profile-aware caches and MP3 duration validation, and clearer reporting of missing download permission.
+- Verified a real three-candidate search over the first ten playlist rows in 72.5 seconds; download authorization remains a separate explicit user declaration.
+
 ## 0.2.0 — 2026-11-09
 
 - Prepared a separate installable MusicMatcher package, reusing the original project's extraction and matching foundations.
