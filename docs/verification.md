@@ -27,3 +27,10 @@ The installed Starlette test client currently emits a deprecation warning about 
 - Real audio, authorization declarations, source metadata and the trial report remain in the user's runtime folders outside the repository. They are not included in the package or Git history.
 
 These checks establish a successful bounded trial. They do not prove recording identity acoustically or guarantee availability of every future YouTube URL.
+
+## Follow-up: adaptive candidate discovery
+
+- `python -m pytest -q`: 144 tests and 3 subtests passed; Ruff and JavaScript syntax checks passed.
+- Mocked yt-dlp request traces verify one-result early acceptance, one-to-maximum expansion for title/artist/duration/version/availability conflicts, missing collaborator evidence and non-official uploads, and no repeated full-metadata requests for the first video.
+- Covered a maximum of one, empty initial results, duplicate results, cancellation before expansion, provider-wide blocking, resume without network requests and expansion of cached one-video results after changing validation profiles.
+- Updated web controls/progress and CLI help to distinguish the configured maximum from the actual number of candidates evaluated. No live searches, Spotify access or new audio downloads were needed for this change. No live speed-up measurement is claimed.

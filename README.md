@@ -45,7 +45,7 @@ In commands below, `musicmatcher` means the executable from your virtual environ
 ## First use
 
 1. Open the web interface and import a CSV/JSON file, or enter an accessible Spotify playlist URL.
-2. In Settings, choose the output folder, MP3 bitrate and number of search candidates. The default is **8**, configurable from **1 to 25**.
+2. In Settings, choose the output folder, MP3 bitrate and maximum search candidates. The maximum defaults to **8**, configurable from **1 to 25**. Search starts with **1** and only expands when evidence is uncertain.
 3. Run the search. Follow the current phase, completed work, estimated remaining time and individual errors.
 4. Review uncertain matches. Check the recording and version before accepting its URL.
 5. Record an applicable download permission and its source, then start audio processing.
@@ -104,6 +104,8 @@ The repository does not supply a shared Spotify application or credentials. Musi
 The app now defaults to **Flexible** matching. It accepts uploader titles containing credits, album names and promotional labels without requiring structured musical metadata. Duration tolerance is `max(12 seconds, 5%)`. Missing explicit/clean evidence is a warning; known contradictions, incompatible versions, unavailable links and different numbered works remain rejected.
 
 Flexible selection requires a score of at least 78 and a 2-point margin, except for uploads with equivalent metadata. Scores are not probabilities. The previous **Strict** mode remains selectable in the web interface.
+
+Search is **adaptive**: request one YouTube result and its full metadata first. It can stop there if title/artist evidence is clear, duration differs by at most 3 seconds, there is an official-upload hint and no uncertain version/collaborator warnings. Early acceptance requires at least 90 points as well as the selected profile's rules. Missing evidence, contradictions or an unavailable first video trigger discovery up to the configured maximum; the first video's details are reused. Thus `--candidates 3` inspects **1 or up to 3 videos total**, never 1 + 3. The web interface shows the actual evaluated count. Remaining ambiguity requires manual review. A one-video decision cannot compare alternatives that were never retrieved.
 
 Use “Procesar primeras canciones” to limit a trial to the first N rows while preserving the entire catalog. Leave it empty for all rows. The CLI equivalent is:
 

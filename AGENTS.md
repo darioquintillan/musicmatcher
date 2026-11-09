@@ -24,7 +24,7 @@ Use Python 3.11+ and public dependencies declared in `pyproject.toml`. Run `pyth
 
 - Preserve exact source titles/artists for metadata; normalize only copies used for comparison and portable filenames.
 - Preserve all positions and duplicate occurrences. Reuse work by compatible identity, never title alone.
-- Candidate count defaults to 8 and accepts 1–25 in both interfaces. Keep UI, CLI, model bounds and documentation consistent.
+- Candidate count is now an adaptive maximum: start with one result and expand up to the configured maximum when evidence is weak, contradictory or lacks an official-upload hint. The maximum defaults to 8 and accepts 1–25 in both interfaces. Never retrieve the first video's full metadata twice during expansion. Keep UI, CLI, model bounds and documentation consistent.
 - The user's later instruction makes the app's default matching mode `relaxed`; retain explicit `strict` validation for comparison and regression coverage. Flexible mode may accept missing structured metadata and unknown explicit flags, while known artist/version/number contradictions remain disqualifying. Keep the selected mode in cache identities and match results.
 - A bounded trial (`track_limit` / `--first`) must preserve the full catalog and never search or download rows beyond that prefix.
 - Contradicting artist, version, duration, numbered work or movement cannot be overridden by a high similarity score.

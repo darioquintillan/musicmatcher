@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from .mapping_manager import canonical_youtube_url, export_results, load_state, save_state, utc_now
-from .match_validator import ALGORITHM_VERSION, _json_safe, choose_match
+from .match_validator import ALGORITHM_VERSION, _json_safe, choose_match, first_candidate_is_confident
 
 logger = logging.getLogger(__name__)
+SEARCH_STRATEGY = "adaptive-v1"
 _CANDIDATE_FIELDS = (
     "id", "webpage_url", "title", "track", "artists", "artist", "album", "channel", "uploader",
     "channel_id", "channel_is_verified", "duration", "description", "availability", "live_status", "explicit",
@@ -41,7 +42,7 @@ def _fingerprint(track: dict[str, Any]) -> str:
 def _cache_fingerprint(track: dict[str, Any], settings: Any) -> str:
     identity = {"metadata": _fingerprint(track), "algorithm": ALGORITHM_VERSION,
                 "candidate_limit": getattr(settings, "candidate_limit", 8),
-                "matching_mode": getattr(settings, "matching_mode", "relaxed")}
+                "matching_mode": getattr(settings, "matching_mode", "relaxed"), "search_strategy": SEARCH_STRATEGY}
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
@@ -90,7 +91,10 @@ class _QuietLogger:
     def error(self, message: str) -> None: pass
 
 
-def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None) -> list[dict[str, Any]]:
+def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None,
+                       track: dict[str, Any] | None = None, matching_mode: str = "relaxed",
+                       cached_candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Inspect one result first, expanding to the maximum only when evidence is weak."""
     from yt_dlp import YoutubeDL
 
     _check_stop(stop_event)
@@ -98,55 +102,86 @@ def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None
                "socket_timeout": 20, "retries": 2, "extractor_retries": 2, "fragment_retries": 2,
                "retry_sleep_functions": {"http": lambda n: min(2 ** n, 20), "extractor": lambda n: min(2 ** n, 20)},
                "ignoreerrors": False}
-    if progress:
-        progress({"message": "Consultando resultados de YouTube", "status": "discovering"})
-    with YoutubeDL({**options, "extract_flat": True}) as search:
-        results = search.extract_info(f"ytsearch{limit}:{query}", download=False)
-        if not isinstance(results, dict):
-            raise RuntimeError("YouTube no devolvió resultados válidos.")
-        entries = list(results.get("entries") or [])[:limit]
-    candidates, seen = [], set()
+    candidates = copy.deepcopy(cached_candidates or [])[:limit]
+    if cached_candidates is not None:
+        # A previously complete result set needs no new network requests. A
+        # single early result may need expansion after changing matching mode.
+        if (track is None or len(candidates) != 1 or limit == 1
+                or first_candidate_is_confident(track, candidates[0], mode=matching_mode)):
+            return candidates
+        stages = [limit]
+    else:
+        stages = [1, limit] if track is not None and limit > 1 else [limit]
+    seen = {canonical_youtube_url(item["webpage_url"] if item.get("webpage_url") else
+                                  "https://www.youtube.com/watch?v=" + str(item["id"]))
+            for item in candidates}
     with YoutubeDL({**options, "noplaylist": True}) as detail:
-        for index, entry in enumerate(entries):
+        for stage_limit in stages:
             _check_stop(stop_event)
-            if not isinstance(entry, dict):
-                raise RuntimeError("YouTube devolvió un candidato incompleto.")
-            raw_url = ("https://www.youtube.com/watch?v=" + str(entry["id"])) if entry.get("id") else (
-                entry.get("webpage_url") or entry.get("url") or ""
-            )
-            url = canonical_youtube_url(raw_url)
-            if url in seen:
-                continue
-            seen.add(url)
             if progress:
-                progress({"message": f"Consultando candidato {index + 1}/{len(entries)}", "status": "candidate_lookup",
-                          "candidate_done": index, "candidate_total": len(entries)})
-            try:
-                info = detail.extract_info(url, download=False)
-            except Exception as error:
-                message = str(error)
-                reason = None if _blocked(message) else _individual_unavailable(message)
-                if reason is None:
-                    raise
-                candidates.append({
-                    "id": url.rsplit("=", 1)[-1], "webpage_url": url,
-                    "title": str(entry.get("title") or "Vídeo no disponible"),
-                    "availability": "needs_auth" if reason == "age_restricted" else reason,
-                    "unavailable_reason": reason, "metadata_error": message,
-                })
-                logger.info("Candidato %s omitido: %s", url.rsplit("=", 1)[-1], reason)
+                expanded = stage_limit > 1 and track is not None
+                progress({"message": (f"Hay dudas en el primer candidato; ampliando hasta {limit}" if expanded else
+                                      "Consultando el primer resultado de YouTube"),
+                          "status": "candidate_expand" if expanded else "discovering",
+                          "candidate_done": len(candidates), "candidate_total": stage_limit,
+                          "candidate_limit": limit})
+            with YoutubeDL({**options, "extract_flat": True}) as search:
+                results = search.extract_info(f"ytsearch{stage_limit}:{query}", download=False)
+                if not isinstance(results, dict):
+                    raise RuntimeError("YouTube no devolvió resultados válidos.")
+                entries = list(results.get("entries") or [])[:stage_limit]
+            for entry in entries:
+                _check_stop(stop_event)
+                if len(candidates) >= stage_limit:
+                    break
+                if not isinstance(entry, dict):
+                    raise RuntimeError("YouTube devolvió un candidato incompleto.")
+                raw_url = ("https://www.youtube.com/watch?v=" + str(entry["id"])) if entry.get("id") else (
+                    entry.get("webpage_url") or entry.get("url") or ""
+                )
+                url = canonical_youtube_url(raw_url)
+                if url in seen:
+                    continue
+                seen.add(url)
                 if progress:
-                    progress({"message": f"Candidato {index + 1}/{len(entries)} no disponible ({reason})",
-                              "status": "candidate_error", "candidate_done": index + 1, "candidate_total": len(entries)})
-                continue
-            if not isinstance(info, dict):
-                raise RuntimeError("No se obtuvieron los metadatos completos de un candidato.")
-            snapshot = _json_safe({field: info[field] for field in _CANDIDATE_FIELDS if field in info})
-            snapshot.update(webpage_url=url, id=url.rsplit("=", 1)[-1])
-            candidates.append(snapshot)
-            if progress:
-                progress({"message": f"Candidato {index + 1}/{len(entries)} consultado", "status": "candidate_ready",
-                          "candidate_done": index + 1, "candidate_total": len(entries)})
+                    progress({"message": f"Consultando candidato {len(candidates) + 1}/{stage_limit}",
+                              "status": "candidate_lookup", "candidate_done": len(candidates),
+                              "candidate_total": stage_limit})
+                try:
+                    info = detail.extract_info(url, download=False)
+                except Exception as error:
+                    message = str(error)
+                    reason = None if _blocked(message) else _individual_unavailable(message)
+                    if reason is None:
+                        raise
+                    candidates.append({
+                        "id": url.rsplit("=", 1)[-1], "webpage_url": url,
+                        "title": str(entry.get("title") or "Vídeo no disponible"),
+                        "availability": "needs_auth" if reason == "age_restricted" else reason,
+                        "unavailable_reason": reason, "metadata_error": message,
+                    })
+                    logger.info("Candidato %s omitido: %s", url.rsplit("=", 1)[-1], reason)
+                    if progress:
+                        progress({"message": f"Candidato {len(candidates)}/{stage_limit} no disponible ({reason})",
+                                  "status": "candidate_error", "candidate_done": len(candidates),
+                                  "candidate_total": stage_limit})
+                    continue
+                if not isinstance(info, dict):
+                    raise RuntimeError("No se obtuvieron los metadatos completos de un candidato.")
+                snapshot = _json_safe({field: info[field] for field in _CANDIDATE_FIELDS if field in info})
+                snapshot.update(webpage_url=url, id=url.rsplit("=", 1)[-1])
+                candidates.append(snapshot)
+                if progress:
+                    progress({"message": f"Candidato {len(candidates)}/{stage_limit} consultado",
+                              "status": "candidate_ready", "candidate_done": len(candidates),
+                              "candidate_total": stage_limit})
+            _check_stop(stop_event)
+            if (track is not None and stage_limit == 1 and len(candidates) == 1
+                    and first_candidate_is_confident(track, candidates[0], mode=matching_mode)):
+                if progress:
+                    progress({"message": "El primer candidato encaja con claridad; no es necesario ampliar",
+                              "status": "candidate_early_accept", "candidate_done": 1, "candidate_total": 1})
+                break
     _check_stop(stop_event)
     return candidates
 
@@ -204,16 +239,24 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
                 _apply_match(track, {"status": "unmatched", "url": None, "reasons": ["missing_track_metadata"],
                                      "algorithm_version": ALGORITHM_VERSION, "cache_fingerprint": fingerprint})
             else:
-                emit(index, "Buscando candidatos", title, status="looking_up")
+                emit(index, "Buscando candidatos", title, status="looking_up", candidate_done=0,
+                     candidate_total=1, candidate_limit=limit)
                 query = f"{title} {' '.join(track['artists'])}"
-                # A changed candidate limit must discover that many results anew.
+                mode = getattr(settings, "matching_mode", "relaxed")
                 saved = old_match.get("candidates")
+                cached_candidates = None
                 if (not refresh and old_match.get("metadata_fingerprint") == _fingerprint(track)
                         and old_match.get("candidate_limit") == limit and isinstance(saved, list)):
-                    candidates = [entry.get("candidate", entry) for entry in saved]
+                    cached_candidates = [entry.get("candidate", entry) for entry in saved]
                     emit(index, "Reutilizando candidatos guardados", title, status="candidate_cache")
+                if cached_candidates is not None and (len(cached_candidates) != 1 or limit == 1
+                        or first_candidate_is_confident(track, cached_candidates[0], mode=mode)):
+                    candidates = cached_candidates
+                    emit(index, "Candidatos recuperados de la caché", title, status="candidate_cache",
+                         candidate_done=len(candidates), candidate_total=len(candidates), candidate_limit=limit)
                 else:
-                    candidates = _search_candidates(query, limit, stop_event=stop_event,
+                    candidates = _search_candidates(query, limit, stop_event=stop_event, track=track,
+                                                    matching_mode=mode, cached_candidates=cached_candidates,
                                                     progress=lambda event: emit(index, title=title, **event))
                 candidates = _json_safe(candidates)
                 _check_stop(stop_event)
@@ -224,7 +267,8 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
                 if candidate_errors:
                     decision["candidate_errors"] = candidate_errors
                 decision.update(query=query, updated_at=utc_now(), metadata_fingerprint=_fingerprint(track),
-                                cache_fingerprint=fingerprint, candidate_limit=limit)
+                                cache_fingerprint=fingerprint, candidate_limit=limit, candidate_count=len(candidates),
+                                search_strategy=SEARCH_STRATEGY)
                 _apply_match(track, decision)
                 cache[fingerprint] = copy.deepcopy(decision)
                 summary["searched"] += 1

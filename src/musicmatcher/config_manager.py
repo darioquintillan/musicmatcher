@@ -16,7 +16,7 @@ from .mapping_manager import atomic_json
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    candidate_limit: int = Field(default=8, ge=1, le=25)
+    candidate_limit: int = Field(default=8, ge=1, le=25, description="Maximum candidates; inspect one first")
     matching_mode: Literal["strict", "relaxed"] = "relaxed"
     output_dir: str = str(Path.home() / "Music" / "MusicMatcher")
     bitrate: Literal[64, 96, 128, 160, 192, 224, 256, 320] = 320

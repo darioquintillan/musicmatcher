@@ -176,7 +176,7 @@
     const candidates = count(job.candidate_total);
     $("candidate-progress").textContent = step === 2 && job.download_percent != null
       ? `Audio actual: ${Math.round(Math.max(0, Math.min(100, Number(job.download_percent) || 0)))} %`
-      : step === 1 && candidates ? `Candidatos: ${count(job.candidate_done)} de ${candidates}`
+      : step === 1 && candidates ? `Evaluados: ${count(job.candidate_done)} de ${candidates} · máximo ${count(job.candidate_limit || state.config.candidate_limit)}`
         : (job.status === "running" ? "Procesando tu lista" : "Los resultados se guardan en local");
     document.querySelectorAll("[data-stage]").forEach((element, index) => {
       element.classList.toggle("active", index === step && job.status === "running");
@@ -264,6 +264,8 @@
       const badge = node("span", `status-badge ${Object.hasOwn(statusNames, match.status) ? match.status : "pending"}`, statusNames[match.status] || "Pendiente");
       badge.title = (Array.isArray(match.reasons) ? match.reasons.filter((reason) => typeof reason === "string").join(" · ") : "") || track.unavailable_reason || "";
       statusCell.append(badge);
+      const evaluated = Array.isArray(match.candidates) ? match.candidates.length : 0;
+      if (evaluated) statusCell.append(node("div", "match-caption", `${evaluated} vídeo${evaluated === 1 ? "" : "s"} evaluado${evaluated === 1 ? "" : "s"} · máx. ${match.candidate_limit || evaluated}`));
       row.append(statusCell);
       const linkCell = node("td");
       if (match.status === "accepted" && canonicalVideo(match.url)) {
@@ -349,7 +351,7 @@
   }
   function sourceConfig() {
     const limit = Number($("candidate-limit").value);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 25) throw new Error("Indica entre 1 y 25 vídeos a comparar por canción.");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 25) throw new Error("Indica un máximo de entre 1 y 25 vídeos por canción.");
     return {candidate_limit: limit, spotify_client_id: $("source-client-id").value.trim(), spotify_redirect_uri: $("source-redirect-uri").value.trim()};
   }
   function importPayload() {

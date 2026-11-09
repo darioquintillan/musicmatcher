@@ -51,7 +51,7 @@ Imports validate before publishing. A different catalogue needs explicit replace
 
 ## Matching and caching
 
-Retrieve a bounded candidate set through yt-dlp, then inspect candidate metadata and apply deterministic checks. The default candidate limit is 8 and the supported range is 1–25. More candidates increase external requests; they do not guarantee a valid match.
+Retrieve one result and its full metadata through yt-dlp first. Stop only when the configured validator accepts it with at least 90 points, near-exact title/artist evidence, duration within 3 seconds, an official-upload hint and no uncertain version/collaborator warnings. Otherwise discover up to the configured maximum and fetch only unseen videos' details. The default maximum is 8 and the supported range is 1–25. With a maximum of 3, no more than 3 distinct videos are inspected, not 1 + 3. Retain the actual candidate count, strategy version and configured maximum in each decision. Compatible caches and duplicate occurrences reuse metadata; a changed validation profile can expand an earlier one-result decision if necessary. More candidates increase external requests; they do not guarantee a valid match. Early acceptance cannot assess ambiguity among unseen alternatives.
 
 Comparison copies can normalize Unicode and promotional text. Stored metadata stays exact. Check credited artists, title, numbered works/parts, duration and version qualifiers. High confidence is a heuristic outcome, not a measured probability or proof of identical audio. Missing evidence and close competing candidates require review.
 

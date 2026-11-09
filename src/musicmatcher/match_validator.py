@@ -544,3 +544,23 @@ def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]], *, mod
     if equivalent_uploads:
         result["reasons"].append("equivalent_metadata_uploads")
     return result
+
+
+def first_candidate_is_confident(track: dict[str, Any], candidate: dict[str, Any], *, mode: str) -> bool:
+    """Stop discovery only with stronger evidence than ordinary flexible acceptance."""
+    decision = choose_match(track, [candidate], mode=mode)
+    if decision["status"] != "accepted":
+        return False
+    evidence = decision["candidates"][0]
+    # Unknown explicit flags and missing structured fields are tolerated by the
+    # flexible profile. Uncertain versions/credits still warrant alternatives.
+    benign_warnings = {"explicit_flag_not_independently_verified", "explicit_version_requires_review",
+                       "structured_artist_metadata_missing", "structured_track_metadata_missing"}
+    official_hint = bool(candidate.get("channel_is_verified")) or bool(re.search(
+        r"\b(?:official audio|official video|audio oficial|video oficial|topic)\b",
+        normalize(str(candidate.get("title") or "") + " " + str(candidate.get("channel") or "")),
+    ))
+    difference = evidence["duration_difference_seconds"]
+    return (official_hint and evidence["score"] >= 90 and evidence["title_similarity"] >= 0.98
+            and evidence["artist_similarity"] >= 0.95 and difference is not None and difference <= 3
+            and set(evidence["warnings"]) <= benign_warnings)

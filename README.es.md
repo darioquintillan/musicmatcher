@@ -45,7 +45,7 @@ En los ejemplos siguientes, `musicmatcher` representa el ejecutable del entorno 
 ## Primer uso
 
 1. Importa un CSV/JSON desde la web o introduce una URL de playlist de Spotify accesible.
-2. En Configuración, selecciona carpeta de salida, bitrate MP3 y número de candidatos. Se consultan **8 por defecto**; puedes elegir entre **1 y 25**.
+2. En Configuración, selecciona carpeta de salida, bitrate MP3 y máximo de candidatos. El máximo es **8 por defecto**; puedes elegir entre **1 y 25**. Se consulta primero **1** y solo se amplía si hay dudas.
 3. Ejecuta la búsqueda y sigue la fase actual, el progreso, el tiempo restante estimado y los errores individuales.
 4. Comprueba las grabaciones dudosas y acepta sus enlaces cuando correspondan a la versión buscada.
 5. Registra el permiso de descarga y su procedencia antes de procesar el audio.
@@ -104,6 +104,8 @@ El repositorio no aporta una aplicación compartida ni credenciales de Spotify. 
 La aplicación utiliza ahora el modo **Flexible** por defecto. Admite títulos con créditos de colaboradores, nombres de álbum y etiquetas promocionales, sin exigir metadatos musicales estructurados de YouTube. La duración admite `max(12 segundos, 5 %)`. No conocer el indicador explícito/censurado genera una advertencia; una contradicción conocida sigue descartándose. También se mantienen los descartes de versiones incompatibles, intérpretes contradictorios, enlaces no accesibles y números de obra distintos.
 
 La selección flexible exige al menos 78 puntos y 2 de ventaja frente a alternativas, salvo publicaciones con metadatos equivalentes. Las puntuaciones no son probabilidades. El modo **Estricto** anterior sigue disponible en «Reglas de coincidencia».
+
+La búsqueda es **adaptativa**: primero solicita un resultado de YouTube y sus metadatos completos. Puede terminar ahí si el título y artista coinciden claramente, la duración difiere como máximo 3 segundos, hay indicios de publicación oficial y no hay advertencias de versiones o colaboradores dudosos. Esta salida rápida exige al menos 90 puntos, además de las reglas del modo elegido. Si falta evidencia, hay contradicciones o el primer vídeo no está disponible, solicita hasta el máximo configurado y compara las alternativas. Reutiliza los metadatos del primero. Con `--candidates 3` consulta **1 o hasta 3 vídeos en total**, nunca 1 + 3. La web muestra el número realmente evaluado. Si siguen existiendo dudas, mantiene la revisión manual. Una decisión que termina tras un único vídeo no permite comparar alternativas que no se han consultado.
 
 El campo «Procesar primeras canciones» permite probar un lote sin eliminar el resto del catálogo. Vacío significa toda la lista. En CLI:
 

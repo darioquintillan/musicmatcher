@@ -135,7 +135,7 @@ class Workspace:
         with self.lock:
             previous_stage = self.job.get("stage")
             for name in ("stage", "done", "total", "message", "current_title", "candidate_done", "candidate_total",
-                         "download_percent"):
+                         "candidate_limit", "download_percent"):
                 if name in event:
                     self.job[name] = redact(event[name]) if isinstance(event[name], str) else event[name]
             if previous_stage != self.job.get("stage"):
@@ -164,6 +164,7 @@ class Workspace:
             self.job.update(status="running", stage=stage, done=self.baseline, total=len(selected_tracks),
                             message="Preparando el proceso…", current_title="", started_at=utc_now(),
                             elapsed_seconds=0, eta_seconds=None, error=None, candidate_done=0, candidate_total=0,
+                            candidate_limit=self.settings.candidate_limit,
                             track_limit=request.get("track_limit"), finished_at=None)
             atomic_json(self.data_dir / "job.json", self.job)
             config = self.settings.model_copy(deep=True)

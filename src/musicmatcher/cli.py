@@ -33,7 +33,8 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("file", type=Path, nargs="?")
     run.add_argument("--replace", action="store_true")
     for command in (search, run):
-        command.add_argument("--candidates", type=int, choices=range(1, 26), metavar="1..25")
+        command.add_argument("--candidates", type=int, choices=range(1, 26), metavar="1..25",
+                             help="Máximo de vídeos por canción; empieza con 1 y amplía si hay dudas")
         command.add_argument("--refresh", action="store_true")
         command.add_argument("--matching-mode", choices=("strict", "relaxed"))
     review = sub.add_parser("review", help="Mostrar canciones pendientes y candidatos")
