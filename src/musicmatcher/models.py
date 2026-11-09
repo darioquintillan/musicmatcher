@@ -84,5 +84,3 @@ class Song(TrackInput):
         if contains_spotify_data(self.model_dump()):
             self.source = "spotify"
         return self
-
-

@@ -356,4 +356,3 @@ def choose_match(track: dict[str, Any], candidates: list[dict[str, Any]]) -> dic
         return result
     result.update(status="accepted", url=best["url"], reasons=["strong_metadata_match"])
     return result
-

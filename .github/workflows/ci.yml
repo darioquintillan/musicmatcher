@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11', '3.12']
+    env:
+      MUSICMATCHER_DATA_DIR: ${{ runner.temp }}/musicmatcher-test-data
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install package and test tools
+        run: python -m pip install -e ".[dev]"
+      - name: Check Python syntax and names
+        run: python -m ruff check src tests
+      - name: Run mocked and local-fixture tests
+        run: python -m pytest -q
+      - name: Build distributable package
+        run: python -m build
+      - name: Keep wheel and source archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.os }}-py${{ matrix.python }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  audio:
+    name: Generated audio / Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MUSICMATCHER_DATA_DIR: ${{ runner.temp }}/musicmatcher-audio-test-data
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install FFmpeg and ffprobe
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y ffmpeg
+      - name: Install package and test tools
+        run: python -m pip install -e ".[dev]"
+      - name: Run tests with generated local audio
+        run: python -m pytest -q

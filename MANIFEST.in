@@ -1,0 +1,6 @@
+include README.es.md LICENSE THIRD_PARTY_NOTICES.md CONTRIBUTING.md SECURITY.md CHANGELOG.md AGENTS.md
+include start_windows.cmd start.sh .env.example
+include .gitignore .gitattributes requirements.txt
+recursive-include docs *.md
+recursive-include examples *.csv *.json
+recursive-include .github *.yml

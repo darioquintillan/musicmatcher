@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MusicMatcher · Tu biblioteca local</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <aside class="sidebar" aria-label="Navegación principal">
+    <a class="brand" href="#main" aria-label="MusicMatcher, inicio">
+      <span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 13v6m5-11v16m6-20v24m6-19v14m5-10v6"/></svg></span>
+      <span class="brand-copy">MusicMatcher<small>Tu biblioteca local</small></span>
+    </a>
+    <p class="nav-caption">ESPACIO DE TRABAJO</p>
+    <nav class="nav-links">
+      <a class="nav-link active" href="#library" aria-label="Biblioteca" title="Biblioteca"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v16H4zm10 0h6v16h-6M7 8h0m10 0h0"/></svg><span>Biblioteca</span></a>
+      <a class="nav-link" href="#activity" aria-label="Actividad" title="Actividad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Actividad</span></a>
+      <button class="nav-link" type="button" aria-label="Configuración" title="Configuración" data-open-settings data-lock><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/></svg><span>Configuración</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="local-note"><span class="status-dot"></span><strong>En tu equipo</strong><p>Tu catálogo y tus archivos se guardan en local.</p></div>
+      <div class="dependency-list" aria-label="Herramientas disponibles">
+        <span id="dep-ffmpeg"><i></i>FFmpeg</span><span id="dep-deno"><i></i>Deno</span>
+      </div>
+      <button type="button" class="disconnect" id="disconnect-button" data-lock>Desconectar Spotify</button>
+      <p class="version-label">MUSICMATCHER · LOCAL</p>
+    </div>
+  </aside>
+
+  <main class="app-shell" id="main">
+    <header class="page-header">
+      <div><div class="eyebrow">TU ESPACIO MUSICAL</div><h1>Tu música, en el mismo sitio.</h1><p>De tu lista a tu biblioteca, una buena coincidencia cada vez.</p></div>
+      <div class="header-actions"><span class="connection-pill" id="connection-status" role="status"><span class="status-dot"></span>Conectando…</span><button class="button button-primary" id="run-button" type="button" data-lock><span aria-hidden="true">▶</span> Ejecutar todo</button></div>
+    </header>
+
+    <div class="error-banner" id="error-banner" role="alert" hidden><span id="error-message"></span><button type="button" id="dismiss-error" aria-label="Cerrar aviso">×</button></div>
+
+    <section class="top-grid" aria-label="Importación y progreso">
+      <article class="card import-card">
+        <div class="card-heading"><div class="heading-with-icon"><span class="section-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg></span><div><h2>Empieza con una lista</h2><p>Elige de dónde importar tus canciones.</p></div></div><span class="step-label">PASO 01</span></div>
+        <div class="source-tabs" role="tablist" aria-label="Origen de las canciones">
+          <button type="button" id="tab-spotify" role="tab" aria-selected="true" aria-controls="panel-spotify" data-source="spotify" data-lock><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7 9c4-1 7-.5 10 1M8 12c3-.8 5-.5 8 1m-7 2c2-.4 4-.2 6 .6"/></svg>Spotify</button>
+          <button type="button" id="tab-file" role="tab" aria-selected="false" aria-controls="panel-file" tabindex="-1" data-source="file" data-lock><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zm9 0v6h5M8 13h8m-8 4h6"/></svg>Archivo CSV / JSON</button>
+        </div>
+        <form id="import-form">
+          <div id="panel-spotify" role="tabpanel" aria-labelledby="tab-spotify">
+            <label class="field-label" for="spotify-url">Enlace de tu playlist</label>
+            <div class="input-with-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 15 6-6m-6 1L6 13a3.5 3.5 0 0 0 5 5l3-3m-4-6 3-3a3.5 3.5 0 0 1 5 5l-3 3"/></svg><input id="spotify-url" type="url" placeholder="https://open.spotify.com/playlist/…" autocomplete="off" data-lock></div>
+            <p class="field-help">Usa una playlist propia o en la que colaboras. Spotify te pedirá autorizar el acceso.</p>
+            <details class="advanced-details"><summary>Conexión con Spotify</summary><div class="details-content"><label class="field-label" for="source-client-id">Client ID de tu aplicación <span class="optional">Público</span></label><input id="source-client-id" type="text" autocomplete="off" placeholder="Identificador de Spotify for Developers" spellcheck="false" data-lock><label class="field-label" for="source-redirect-uri">URI de redirección</label><input id="source-redirect-uri" type="url" value="http://127.0.0.1:8888/callback" spellcheck="false" data-lock><p class="field-help">Debe coincidir con la URI registrada en tu aplicación de Spotify.</p></div></details>
+          </div>
+          <div id="panel-file" role="tabpanel" aria-labelledby="tab-file" hidden>
+            <label class="drop-zone" id="drop-zone" for="file-input"><input id="file-input" type="file" accept=".csv,.json,text/csv,application/json" data-lock><span class="upload-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 16v5h16v-5"/></svg></span><strong id="file-name">Arrastra tu archivo hasta aquí</strong><span id="file-description">o pulsa para elegir un CSV o JSON</span><small>Los datos se leen en tu equipo y se importan al catálogo local.</small></label>
+          </div>
+          <div class="comparison-setting"><div><label class="field-label" for="candidate-limit">Vídeos a comparar por canción</label><p class="field-help">Comparamos título, artista, duración y versión.</p></div><input id="candidate-limit" type="number" min="1" max="25" value="8" inputmode="numeric" data-lock></div>
+          <label class="checkbox-row replace-row" id="replace-row" hidden><input id="replace-catalog" type="checkbox" data-lock><span>Sustituir el catálogo actual <small>Conserva los archivos MP3 que ya tienes.</small></span></label>
+          <div class="import-actions"><button class="button button-primary" id="import-button" type="submit" data-lock>Importar playlist <span aria-hidden="true">↗</span></button><span class="format-note" id="source-note">Lectura mediante la API oficial</span></div>
+        </form>
+      </article>
+
+      <article class="progress-card" aria-labelledby="progress-heading">
+        <div class="progress-card-top"><span class="dark-eyebrow">CADA PASO, A LA VISTA</span><span class="job-status" id="job-status">En espera</span></div>
+        <div class="progress-main"><div class="progress-ring" role="progressbar" aria-label="Progreso del proceso" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-meter"><svg viewBox="0 0 160 160" aria-hidden="true"><circle class="ring-track" cx="80" cy="80" r="66"/><circle class="ring-fill" id="ring-fill" cx="80" cy="80" r="66"/></svg><div><strong id="progress-percent">0<span>%</span></strong><small id="progress-fraction">0 de 0</small></div></div><div class="progress-copy"><h2 id="progress-heading">Todo preparado</h2><p id="job-message" aria-live="polite">Importa una lista para empezar.</p><span id="current-title" class="current-title"></span></div></div>
+        <div class="stage-track" aria-label="Fases del proceso"><span data-stage="import"><i></i>Importar</span><span data-stage="search"><i></i>Comparar</span><span data-stage="download"><i></i>Descargar</span></div>
+        <div class="progress-detail"><span id="candidate-progress">Sin actividad pendiente</span><span id="job-time">00:00</span></div>
+        <div class="progress-bar"><span id="linear-progress"></span></div>
+        <button type="button" id="stop-button" class="button button-stop" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg><span>Detener proceso</span></button>
+        <p class="resume-note">Puedes detenerlo y continuar con los resultados guardados.</p>
+      </article>
+    </section>
+
+    <section class="overview-grid" aria-label="Resumen de la biblioteca">
+      <div class="stats-grid">
+        <article class="stat-card"><div><span>Canciones en tu lista</span><strong id="stat-total">0</strong><small>En el orden original</small></div><span class="stat-icon neutral"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg></span></article>
+        <article class="stat-card"><div><span>Coincidencias aceptadas</span><strong id="stat-accepted">0</strong><small>Listas para autorizar</small></div><span class="stat-icon mint"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m8 12 3 3 5-6"/></svg></span></article>
+        <article class="stat-card"><div><span>Necesitan tu revisión</span><strong id="stat-review">0</strong><small>Elegimos con cuidado</small></div><span class="stat-icon peach"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4m-9.5-12v3m0 3h0"/></svg></span></article>
+        <article class="stat-card"><div><span>MP3 completados</span><strong id="stat-downloaded">0</strong><small>Con los metadatos originales</small></div><span class="stat-icon lavender"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></span></article>
+      </div>
+      <article class="card activity-card" id="activity"><div class="activity-heading"><h2>Últimos movimientos</h2><span class="live-badge"><i></i>En directo</span></div><ol class="activity-list" id="activity-list"><li class="activity-empty">Aquí verás lo que ocurre durante el proceso.</li></ol></article>
+    </section>
+
+    <section class="card library-card" id="library" aria-labelledby="library-heading">
+      <div class="library-heading"><div><div class="eyebrow">TU BIBLIOTECA</div><h2 id="library-heading">Las canciones de tu lista <span class="count-pill" id="library-count">0</span></h2><p id="catalog-name">Importa una playlist o un archivo para ver tus canciones.</p></div><div class="library-actions"><button class="button button-secondary" id="search-button" type="button" data-lock>Buscar coincidencias</button><button class="button button-primary" id="download-button" type="button" data-lock>Descargar MP3</button></div></div>
+      <div class="library-toolbar"><div class="filter-tabs" role="group" aria-label="Filtrar canciones"><button class="filter active" type="button" data-filter="all" aria-pressed="true">Todas</button><button class="filter" type="button" data-filter="accepted" aria-pressed="false">Aceptadas</button><button class="filter" type="button" data-filter="review" aria-pressed="false">Por revisar</button><button class="filter" type="button" data-filter="unmatched" aria-pressed="false">Sin coincidencia</button><button class="filter" type="button" data-filter="search_error" aria-pressed="false">Errores</button></div><div class="table-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="track-search" type="search" placeholder="Buscar canción o artista" aria-label="Buscar canción o artista" autocomplete="off"></div></div>
+      <div class="table-scroll"><table><thead><tr><th scope="col" class="position-column">#</th><th scope="col">Canción y artista</th><th scope="col">Estado</th><th scope="col">Coincidencia</th><th scope="col" class="actions-column">Acciones</th></tr></thead><tbody id="tracks-body"></tbody></table></div>
+      <div class="library-empty" id="library-empty"><span class="empty-icon"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 20h15l5-6h20v36H12zM30 38V25l13-2v12"/><ellipse cx="26" cy="38" rx="4" ry="3"/><ellipse cx="39" cy="35" rx="4" ry="3"/></svg></span><h3>Tu próxima biblioteca empieza aquí</h3><p>Importa tus canciones. Las coincidencias dudosas siempre pasan por tu revisión.</p></div>
+      <div class="library-footer"><span id="pagination-label">Sin canciones</span><div class="pagination"><button type="button" id="previous-page" class="icon-button" aria-label="Página anterior" disabled>←</button><button type="button" id="next-page" class="icon-button" aria-label="Página siguiente" disabled>→</button></div></div>
+      <div class="export-row"><span>La coincidencia y el permiso de descarga se gestionan por separado.</span><div><a id="export-mapping" href="/api/export/mapping" class="text-link">JSON completo ↗</a><a id="export-links" href="/api/export/links" class="text-link">Solo enlaces ↗</a><button id="clear-catalog" type="button" class="text-button danger-text" data-lock>Vaciar catálogo</button></div></div>
+    </section>
+    <footer class="page-footer"><span>Hecho para escuchar con orden.</span><span>Descarga únicamente contenido para el que tengas autorización.</span></footer>
+  </main>
+
+  <dialog id="settings-dialog" class="modal settings-modal" aria-labelledby="settings-title"><form id="settings-form"><div class="modal-heading"><div><div class="eyebrow">A TU MANERA</div><h2 id="settings-title">Configuración</h2></div><button type="button" class="close-button" data-close-dialog aria-label="Cerrar configuración">×</button></div><div class="modal-body"><div class="form-grid"><div><label for="settings-limit" class="field-label">Vídeos a comparar por canción</label><input id="settings-limit" name="candidate_limit" type="number" min="1" max="25" required data-lock></div><div><label for="settings-bitrate" class="field-label">Calidad MP3</label><select id="settings-bitrate" name="bitrate" data-lock><option value="64">64 kbps</option><option value="96">96 kbps</option><option value="128">128 kbps</option><option value="160">160 kbps</option><option value="192">192 kbps</option><option value="224">224 kbps</option><option value="256">256 kbps</option><option value="320">320 kbps</option></select></div></div><label for="settings-output" class="field-label">Carpeta de salida</label><input id="settings-output" name="output_dir" type="text" required spellcheck="false" data-lock><p class="field-help">Ruta de tu equipo. El MP3 conserva el título y los artistas originales.</p><label for="settings-ffmpeg" class="field-label">Carpeta de FFmpeg <span class="optional">Opcional</span></label><input id="settings-ffmpeg" name="ffmpeg_location" type="text" placeholder="Se buscará en el PATH del sistema" spellcheck="false" data-lock><div class="form-divider"></div><h3>Conexión con Spotify</h3><p class="field-help">El Client ID es público. El acceso a tu cuenta se autoriza en el navegador; no se pide tu contraseña aquí.</p><label for="settings-client-id" class="field-label">Client ID</label><input id="settings-client-id" name="spotify_client_id" type="text" autocomplete="off" spellcheck="false" data-lock><label for="settings-redirect" class="field-label">URI de redirección</label><input id="settings-redirect" name="spotify_redirect_uri" type="url" required spellcheck="false" data-lock><p class="inline-error" id="settings-error" role="alert" hidden></p></div><div class="modal-footer"><button type="button" class="button button-secondary" data-close-dialog>Cancelar</button><button type="submit" class="button button-primary" id="save-settings" data-lock>Guardar cambios</button></div></form></dialog>
+
+  <dialog id="review-dialog" class="modal review-modal" aria-labelledby="review-title"><form id="review-form"><div class="modal-heading"><div><div class="eyebrow">REVISA LA VERSIÓN</div><h2 id="review-title">Elige la coincidencia correcta</h2></div><button type="button" class="close-button" data-close-dialog aria-label="Cerrar revisión">×</button></div><div class="modal-body"><div class="selected-song"><strong id="review-song"></strong><span id="review-artists"></span></div><p class="field-help">Comprueba el artista, la duración y la versión. La puntuación ordena candidatos; no expresa una probabilidad.</p><div class="candidate-list" id="candidate-list"></div><label for="review-url" class="field-label">Enlace elegido de YouTube</label><input id="review-url" type="url" placeholder="https://www.youtube.com/watch?v=…" required spellcheck="false" data-lock><label for="review-note" class="field-label">Motivo de la decisión <span class="optional">Opcional</span></label><textarea id="review-note" rows="2" placeholder="Por ejemplo: audio oficial de la edición del álbum." data-lock></textarea><div class="permission-box"><label class="checkbox-row"><input id="review-authorize" type="checkbox" data-lock><span>Tengo autorización para descargar este audio.</span></label><p class="field-help">Puedes aceptar una coincidencia sin autorizar su descarga.</p><div id="review-authorization-fields" hidden><label for="review-authorization-note" class="field-label">Cómo está autorizada la descarga</label><textarea id="review-authorization-note" rows="2" placeholder="Indica el permiso o la licencia aplicable." data-lock></textarea><label for="review-cover" class="field-label">Carátula local autorizada <span class="optional">Opcional</span></label><input id="review-cover" type="text" placeholder="Ruta a un JPEG o PNG de tu equipo" spellcheck="false" data-lock></div></div><p class="inline-error" id="review-error" role="alert" hidden></p></div><div class="modal-footer"><button type="button" class="button button-secondary" data-close-dialog>Cancelar</button><button type="submit" class="button button-primary" id="save-review" data-lock>Aceptar coincidencia</button></div></form></dialog>
+
+  <dialog id="authorize-dialog" class="modal small-modal" aria-labelledby="authorize-title"><form id="authorize-form"><div class="modal-heading"><div><div class="eyebrow">PERMISO DE DESCARGA</div><h2 id="authorize-title">Autorizar este audio</h2></div><button type="button" class="close-button" data-close-dialog aria-label="Cerrar autorización">×</button></div><div class="modal-body"><div class="selected-song"><strong id="authorize-song"></strong><span id="authorize-artists"></span></div><label class="checkbox-row permission-confirmation"><input id="authorize-confirm" type="checkbox" required data-lock><span>Confirmo que tengo permiso para descargar este audio.</span></label><label for="authorize-note" class="field-label">Permiso o licencia aplicable</label><textarea id="authorize-note" rows="3" required placeholder="Explica cómo está autorizada esta descarga." data-lock></textarea><label for="authorize-cover" class="field-label">Carátula local autorizada <span class="optional">Opcional</span></label><input id="authorize-cover" type="text" placeholder="Ruta a un archivo JPEG o PNG" spellcheck="false" data-lock><p class="field-help">La autorización se vincula al vídeo elegido. Una publicación oficial no implica permiso de descarga.</p><p class="inline-error" id="authorize-error" role="alert" hidden></p></div><div class="modal-footer"><button type="button" class="button button-secondary" data-close-dialog>Cancelar</button><button type="submit" class="button button-primary" id="save-authorization" data-lock>Autorizar descarga</button></div></form></dialog>
+
+  <dialog id="confirm-dialog" class="modal small-modal" aria-labelledby="confirm-title"><div class="modal-heading"><h2 id="confirm-title">Confirmar acción</h2><button type="button" class="close-button" data-close-dialog aria-label="Cerrar confirmación">×</button></div><div class="modal-body"><p id="confirm-message"></p><p class="inline-error" id="confirm-error" role="alert" hidden></p></div><div class="modal-footer"><button type="button" class="button button-secondary" data-close-dialog>Cancelar</button><button type="button" class="button button-danger" id="confirm-action" data-lock>Confirmar</button></div></dialog>
+  <noscript><div class="noscript-note">Activa JavaScript para utilizar el panel local de MusicMatcher.</div></noscript>
+</body>
+</html>
