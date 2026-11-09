@@ -237,7 +237,11 @@
     if (state.eventSource) state.eventSource.close();
     const events = new EventSource("/api/events");
     state.eventSource = events;
-    events.addEventListener("open", () => updateConnection(true));
+    events.addEventListener("open", () => {
+      // The idle-server handover creates a new local request token. Refresh it
+      // on reconnection so Stop and subsequent actions keep working.
+      bootstrap().catch((error) => { updateConnection(false); showError(error.message); });
+    });
     events.addEventListener("snapshot", (event) => {
       try { renderSnapshot(JSON.parse(event.data)); updateConnection(true); }
       catch { showError("No se ha podido leer una actualización del servidor local."); }
