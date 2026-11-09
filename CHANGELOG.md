@@ -4,6 +4,7 @@ Changes are recorded by release. Dates identify planned/local source versions, n
 
 ## Unreleased
 
+- Added an automatic review-only second pass (default maximum 8), preserving existing decisions and reusing known video metadata; API and CLI also support an independent review-only expansion.
 - Added adaptive discovery: inspect one video first, expanding only uncertain cases to the configured maximum without repeating video details; show actual evaluated counts in the web interface.
 - Added a flexible matching profile as the app default while retaining the previous strict rules as an option.
 - Accept missing structured music metadata, collaborator/album/producer credits and unknown explicit flags as warnings when other evidence matches; retain rejection of known incompatible recordings.

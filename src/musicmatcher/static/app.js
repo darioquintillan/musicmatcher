@@ -164,6 +164,7 @@
     const titles = ["Importando tu lista", "Buscando la versión correcta", "Guardando tu música", "Proceso completado"];
     let heading = step >= 0 ? titles[step] : "Todo preparado";
     if (job.status === "paused") heading = "Resultados guardados";
+    else if (job.review_only && step === 1 && job.status === "running") heading = "Ampliando canciones por revisar";
     else if (job.status === "error") heading = "El proceso necesita atención";
     else if (job.status === "completed") heading = "Esta fase ha terminado";
     $("progress-heading").textContent = heading;
@@ -406,6 +407,8 @@
     if (locked()) return;
     const config = state.config;
     $("settings-limit").value = $("candidate-limit").value || config.candidate_limit || 8;
+    $("settings-review-limit").value = config.review_candidate_limit ?? 8;
+    $("review-pass-setting").hidden = !Object.hasOwn(config, "review_candidate_limit");
     $("settings-bitrate").value = config.bitrate || 320;
     $("settings-output").value = config.output_dir || "downloads";
     $("settings-ffmpeg").value = config.ffmpeg_location || "";
@@ -419,6 +422,8 @@
     if (locked()) return;
     const config = {
       candidate_limit: Number($("settings-limit").value), bitrate: Number($("settings-bitrate").value),
+      ...(Object.hasOwn(state.config, "review_candidate_limit")
+        ? {review_candidate_limit: Number($("settings-review-limit").value)} : {}),
       output_dir: $("settings-output").value.trim(), ffmpeg_location: $("settings-ffmpeg").value.trim(),
       spotify_client_id: $("settings-client-id").value.trim(), spotify_redirect_uri: $("settings-redirect").value.trim(),
     };

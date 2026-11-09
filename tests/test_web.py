@@ -156,6 +156,22 @@ def test_configuration_persists_without_any_model_secrets(tmp_path):
         Settings(candidate_limit=26)
 
 
+def test_review_only_request_has_its_own_maximum_without_changing_settings(client):
+    browser, workspace = client
+    import_example(browser)
+    browser.post("/api/config", json={"candidate_limit": 3}).raise_for_status()
+    assert browser.post("/api/jobs", json={"action": "search", "review_only": True,
+                                           "candidate_limit": 26}).status_code == 422
+    assert browser.post("/api/jobs", json={"action": "download", "review_only": True}).status_code == 400
+    with patch("musicmatcher.youtube_search_agent.search_tracks", return_value=workspace.state()) as search:
+        result = browser.post("/api/jobs", json={"action": "search", "review_only": True, "candidate_limit": 8})
+        assert result.status_code == 202
+        assert wait(browser)["job"]["status"] == "completed"
+    assert search.call_args.kwargs["review_only"] is True
+    assert search.call_args.kwargs["settings"].candidate_limit == 8
+    assert workspace.settings.candidate_limit == 3
+
+
 def test_spotify_disconnect_preserves_other_sources_and_removes_tokens(client):
     browser, workspace = client
     import_example(browser)

@@ -107,6 +107,8 @@ La selección flexible exige al menos 78 puntos y 2 de ventaja frente a alternat
 
 La búsqueda es **adaptativa**: primero solicita un resultado de YouTube y sus metadatos completos. Puede terminar ahí si el título y artista coinciden claramente, la duración difiere como máximo 3 segundos, hay indicios de publicación oficial y no hay advertencias de versiones o colaboradores dudosos. Esta salida rápida exige al menos 90 puntos, además de las reglas del modo elegido. Si falta evidencia, hay contradicciones o el primer vídeo no está disponible, solicita hasta el máximo configurado y compara las alternativas. Reutiliza los metadatos del primero. Con `--candidates 3` consulta **1 o hasta 3 vídeos en total**, nunca 1 + 3. La web muestra el número realmente evaluado. Si siguen existiendo dudas, mantiene la revisión manual. Una decisión que termina tras un único vídeo no permite comparar alternativas que no se han consultado.
 
+Al terminar la primera pasada, la aplicación amplía automáticamente **solo las canciones «Por revisar» hasta 8 candidatos** por defecto, si ese máximo supera el inicial. Reutiliza los vídeos ya consultados: de 3 a 8 se añaden hasta 5 nuevos. Conserva las aceptadas, decisiones manuales, errores y canciones sin coincidencia. Puedes cambiar «Máximo en segunda pasada» en Configuración. Si YouTube ofrece menos resultados, registra la cantidad real. La revisión manual sigue siendo necesaria cuando quedan dudas. Para ejecutar solo esta ampliación: `musicmatcher search --review-only --candidates 8`.
+
 El campo «Procesar primeras canciones» permite probar un lote sin eliminar el resto del catálogo. Vacío significa toda la lista. En CLI:
 
 ```bash

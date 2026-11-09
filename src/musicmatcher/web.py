@@ -30,6 +30,8 @@ class JobRequest(BaseModel):
     replace: bool = False
     refresh: bool = False
     track_limit: int | None = Field(default=None, ge=1, le=10000)
+    review_only: bool = False
+    candidate_limit: int | None = Field(default=None, ge=1, le=25)
 
 
 class ReviewRequest(BaseModel):

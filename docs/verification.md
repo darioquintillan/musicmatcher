@@ -34,3 +34,11 @@ These checks establish a successful bounded trial. They do not prove recording i
 - Mocked yt-dlp request traces verify one-result early acceptance, one-to-maximum expansion for title/artist/duration/version/availability conflicts, missing collaborator evidence and non-official uploads, and no repeated full-metadata requests for the first video.
 - Covered a maximum of one, empty initial results, duplicate results, cancellation before expansion, provider-wide blocking, resume without network requests and expansion of cached one-video results after changing validation profiles.
 - Updated web controls/progress and CLI help to distinguish the configured maximum from the actual number of candidates evaluated. No live searches, Spotify access or new audio downloads were needed for this change. No live speed-up measurement is claimed.
+
+## Follow-up: review-only expansion after the first pass
+
+- `python -m pytest -q`: 154 tests and 3 subtests passed; Ruff and JavaScript syntax checks passed.
+- Fake yt-dlp traces confirm three saved candidates expand to eight using exactly five new full-metadata lookups, with no repeat requests for the original three.
+- Covered preservation of accepted/manual/unmatched/error rows and the first summary, duplicate reuse, first-N boundaries, fewer available results, cancellation, failed-expansion retry and reuse of an eight-candidate decision when returning to a three-candidate first pass.
+- Service tests verify first-pass-before-second-pass order, no second pass after a paused/blocked first pass, request-local maxima and API bounds.
+- The already-running legacy process was left running. A private one-time bridge can wait for its complete search, verify no state writer remains, back up the catalogue and reload the idle server before launching review-only expansion. The bridge's guard checks reject running, paused, failed, incomplete and unrelated jobs. The normal updated service handles subsequent two-pass searches directly.

@@ -17,6 +17,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     candidate_limit: int = Field(default=8, ge=1, le=25, description="Maximum candidates; inspect one first")
+    review_candidate_limit: int = Field(default=8, ge=1, le=25)
     matching_mode: Literal["strict", "relaxed"] = "relaxed"
     output_dir: str = str(Path.home() / "Music" / "MusicMatcher")
     bitrate: Literal[64, 96, 128, 160, 192, 224, 256, 320] = 320
@@ -72,6 +73,7 @@ def load_settings(data_dir: Path) -> Settings:
     fields = {
         "candidate_limit": "MUSICMATCHER_CANDIDATE_LIMIT", "output_dir": "MUSICMATCHER_OUTPUT_DIR",
         "matching_mode": "MUSICMATCHER_MATCHING_MODE",
+        "review_candidate_limit": "MUSICMATCHER_REVIEW_CANDIDATE_LIMIT",
         "spotify_client_id": "SPOTIPY_CLIENT_ID", "spotify_redirect_uri": "SPOTIPY_REDIRECT_URI",
     }
     for field, env_name in fields.items():

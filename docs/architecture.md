@@ -59,6 +59,8 @@ Cache/resume keys must include compatible original metadata and algorithm versio
 
 ## Local web and progress
 
+The service runs a review-only second search after a successful initial search when `review_candidate_limit` (default 8) exceeds the initial maximum. It passes cached candidate metadata into an explicit expansion path, which fetches only unseen videos up to the total maximum. Only automatic `review` rows are selected, within any first-N scope. Preserve the first-pass summary separately from `review_search_summary`. A paused or blocked first pass must never trigger this phase. `review_only` and a per-request candidate maximum also expose this phase independently through the API/CLI without changing the saved first-pass settings.
+
 The server binds to `127.0.0.1` and renders bundled static assets. Mutation requests require the instance's request token and pass host/origin checks. It is a desktop workflow, not remote multi-user hosting. The web interface sends the same actions to the service as the CLI.
 
 Long-running work runs outside HTTP request handling. A single active job emits events for stage, completed work, total, message and timing; the browser follows progress through server-sent events. Remaining time is an estimate and can change during network operations. Cancellation is cooperative: check between songs/pages/retries and during the bounded OAuth callback. A current network/FFmpeg operation may need to return before cancellation takes effect.

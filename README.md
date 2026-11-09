@@ -99,6 +99,8 @@ The repository does not supply a shared Spotify application or credentials. Musi
 
 ## CLI
 
+After the first pass, the app automatically expands **only automatic review decisions up to 8 candidates** by default, when this exceeds the initial maximum. It reuses known videos: going from 3 to 8 retrieves at most 5 new videos. Accepted/manual/unmatched/error rows stay unchanged. Change the second-pass maximum in Settings; setting it at or below the initial maximum disables this pass. Fewer available results are recorded honestly, and unresolved ambiguity still requires manual review. Run this phase independently with `musicmatcher search --review-only --candidates 8`.
+
 ### Flexible matching and bounded trial runs
 
 The app now defaults to **Flexible** matching. It accepts uploader titles containing credits, album names and promotional labels without requiring structured musical metadata. Duration tolerance is `max(12 seconds, 5%)`. Missing explicit/clean evidence is a warning; known contradictions, incompatible versions, unavailable links and different numbered works remain rejected.

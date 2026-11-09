@@ -50,6 +50,19 @@ def _manual(match: dict[str, Any]) -> bool:
     return bool(match.get("manual")) or any(match.get(field) == "manual" for field in ("decision", "decision_source", "source"))
 
 
+def _compatible_match(track: dict[str, Any], settings: Any) -> bool:
+    match = track.get("match") or {}
+    if match.get("cache_fingerprint") == _cache_fingerprint(track, settings):
+        return True
+    previous_limit = match.get("candidate_limit")
+    return (isinstance(previous_limit, int) and not isinstance(previous_limit, bool)
+            and previous_limit >= getattr(settings, "candidate_limit", 8)
+            and match.get("metadata_fingerprint") == _fingerprint(track)
+            and match.get("algorithm_version") == ALGORITHM_VERSION
+            and match.get("search_strategy") == SEARCH_STRATEGY
+            and match.get("matching_mode") == getattr(settings, "matching_mode", "relaxed"))
+
+
 def _blocked(message: str) -> bool:
     return bool(re.search(r"\b429\b", message)) or any(fragment in message.casefold() for fragment in (
         "too many requests", "confirm you're not a bot", "confirm you’re not a bot", "rate limit", "request limit",
@@ -93,7 +106,8 @@ class _QuietLogger:
 
 def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None,
                        track: dict[str, Any] | None = None, matching_mode: str = "relaxed",
-                       cached_candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                       cached_candidates: list[dict[str, Any]] | None = None,
+                       expand_saved: bool = False) -> list[dict[str, Any]]:
     """Inspect one result first, expanding to the maximum only when evidence is weak."""
     from yt_dlp import YoutubeDL
 
@@ -103,7 +117,11 @@ def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None
                "retry_sleep_functions": {"http": lambda n: min(2 ** n, 20), "extractor": lambda n: min(2 ** n, 20)},
                "ignoreerrors": False}
     candidates = copy.deepcopy(cached_candidates or [])[:limit]
-    if cached_candidates is not None:
+    if expand_saved:
+        if len(candidates) >= limit:
+            return candidates
+        stages = [limit]
+    elif cached_candidates is not None:
         # A previously complete result set needs no new network requests. A
         # single early result may need expansion after changing matching mode.
         if (track is None or len(candidates) != 1 or limit == 1
@@ -120,7 +138,8 @@ def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None
             _check_stop(stop_event)
             if progress:
                 expanded = stage_limit > 1 and track is not None
-                progress({"message": (f"Hay dudas en el primer candidato; ampliando hasta {limit}" if expanded else
+                progress({"message": (f"Ampliando los candidatos guardados hasta {limit}" if expand_saved else
+                                      f"Hay dudas en el primer candidato; ampliando hasta {limit}" if expanded else
                                       "Consultando el primer resultado de YouTube"),
                           "status": "candidate_expand" if expanded else "discovering",
                           "candidate_done": len(candidates), "candidate_total": stage_limit,
@@ -187,7 +206,7 @@ def _search_candidates(query: str, limit: int, *, progress=None, stop_event=None
 
 
 def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, retry_failed=True, refresh=False,
-                  track_limit: int | None = None) -> dict[str, Any]:
+                  track_limit: int | None = None, review_only: bool = False) -> dict[str, Any]:
     if settings is None:
         from .config_manager import Settings
         settings = Settings()
@@ -199,9 +218,13 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
     if track_limit is not None and (isinstance(track_limit, bool) or not isinstance(track_limit, int) or track_limit < 1):
         raise ValueError("El límite de canciones debe ser un entero positivo.")
     tracks = state["tracks"][:track_limit] if track_limit is not None else state["tracks"]
+    if review_only:
+        tracks = [track for track in tracks if track.get("match", {}).get("status") == "review"
+                  and not _manual(track.get("match") or {})]
     started = utc_now()
     summary = {"searched": 0, "reused": 0, "skipped": 0, "errors": 0, "paused": False, "started_at": started}
-    state["search_summary"] = summary
+    state["review_search_summary" if review_only else "search_summary"] = summary
+    summary["review_only"] = review_only
 
     def emit(done: int, message: str, title: str = "", **extras):
         if progress:
@@ -214,7 +237,7 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
         fingerprint = _cache_fingerprint(track, settings)
         if _manual(match):
             cache[fingerprint] = copy.deepcopy(match)
-        elif not refresh and match.get("cache_fingerprint") == fingerprint and match.get("status") in {"accepted", "review", "unmatched"}:
+        elif not refresh and _compatible_match(track, settings) and match.get("status") in {"accepted", "review", "unmatched"}:
             cache[fingerprint] = copy.deepcopy(match)
     emit(0, "Iniciando búsqueda", status="started")
     done = 0
@@ -226,7 +249,7 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
             fingerprint = _cache_fingerprint(track, settings)
             if old_match.get("status") == "unavailable" or track.get("unavailable_reason") or _manual(old_match):
                 summary["skipped"] += 1
-            elif not refresh and old_match.get("cache_fingerprint") == fingerprint and old_match.get("status") in {"accepted", "review", "unmatched"}:
+            elif not refresh and _compatible_match(track, settings) and old_match.get("status") in {"accepted", "review", "unmatched"}:
                 summary["skipped"] += 1
             elif old_match.get("status") == "search_error" and not (retry_failed or refresh):
                 summary["skipped"] += 1
@@ -245,18 +268,20 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
                 mode = getattr(settings, "matching_mode", "relaxed")
                 saved = old_match.get("candidates")
                 cached_candidates = None
-                if (not refresh and old_match.get("metadata_fingerprint") == _fingerprint(track)
-                        and old_match.get("candidate_limit") == limit and isinstance(saved, list)):
+                if ((review_only or not refresh) and old_match.get("metadata_fingerprint") == _fingerprint(track)
+                        and (review_only or old_match.get("candidate_limit") == limit) and isinstance(saved, list)):
                     cached_candidates = [entry.get("candidate", entry) for entry in saved]
                     emit(index, "Reutilizando candidatos guardados", title, status="candidate_cache")
-                if cached_candidates is not None and (len(cached_candidates) != 1 or limit == 1
-                        or first_candidate_is_confident(track, cached_candidates[0], mode=mode)):
+                if cached_candidates is not None and (len(cached_candidates) >= limit or (not review_only and (
+                        len(cached_candidates) != 1 or limit == 1
+                        or first_candidate_is_confident(track, cached_candidates[0], mode=mode)))):
                     candidates = cached_candidates
                     emit(index, "Candidatos recuperados de la caché", title, status="candidate_cache",
                          candidate_done=len(candidates), candidate_total=len(candidates), candidate_limit=limit)
                 else:
                     candidates = _search_candidates(query, limit, stop_event=stop_event, track=track,
                                                     matching_mode=mode, cached_candidates=cached_candidates,
+                                                    expand_saved=review_only,
                                                     progress=lambda event: emit(index, title=title, **event))
                 candidates = _json_safe(candidates)
                 _check_stop(stop_event)
@@ -269,6 +294,12 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
                 decision.update(query=query, updated_at=utc_now(), metadata_fingerprint=_fingerprint(track),
                                 cache_fingerprint=fingerprint, candidate_limit=limit, candidate_count=len(candidates),
                                 search_strategy=SEARCH_STRATEGY)
+                if review_only:
+                    decision["review_expansion"] = {
+                        "previous_count": len(cached_candidates or []), "target_limit": limit,
+                        "added_count": max(0, len(candidates) - len(cached_candidates or [])),
+                        "updated_at": utc_now(),
+                    }
                 _apply_match(track, decision)
                 cache[fingerprint] = copy.deepcopy(decision)
                 summary["searched"] += 1
@@ -287,6 +318,11 @@ def search_tracks(state_path, *, settings=None, progress=None, stop_event=None, 
             message = str(error)
             decision = {"status": "search_error", "url": None, "error": message, "updated_at": utc_now(),
                         "algorithm_version": ALGORITHM_VERSION}
+            if review_only:
+                # Keep the existing review evidence retryable after a network
+                # failure; never turn a failed expansion into a lost match.
+                decision = copy.deepcopy(old_match)
+                decision["review_expansion"] = {"target_limit": limit, "error": message, "updated_at": utc_now()}
             _apply_match(track, decision)
             cache[_cache_fingerprint(track, settings)] = copy.deepcopy(decision)
             summary["errors"] += 1

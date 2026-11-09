@@ -29,6 +29,7 @@ def parser() -> argparse.ArgumentParser:
     spotify = sub.add_parser("spotify", help="Importar playlist propia o colaborativa")
     spotify.add_argument("url")
     search = sub.add_parser("search", help="Buscar con yt-dlp y validar candidatos")
+    search.add_argument("--review-only", action="store_true", help="Ampliar solo las canciones por revisar, reutilizando candidatos")
     run = sub.add_parser("run", help="Importar archivo opcional, buscar y descargar entradas autorizadas")
     run.add_argument("file", type=Path, nargs="?")
     run.add_argument("--replace", action="store_true")
@@ -107,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(build_mapping(workspace.state()), ensure_ascii=False, indent=2))
             return 0
         changes = {}
-        if getattr(args, "candidates", None) is not None:
+        if getattr(args, "candidates", None) is not None and not getattr(args, "review_only", False):
             changes["candidate_limit"] = args.candidates
         if getattr(args, "matching_mode", None) is not None:
             changes["matching_mode"] = args.matching_mode
@@ -127,6 +128,9 @@ def main(argv: list[str] | None = None) -> int:
             request["spotify_url"] = args.url
         if getattr(args, "refresh", False):
             request["refresh"] = True
+        if getattr(args, "review_only", False):
+            request["review_only"] = True
+            request["candidate_limit"] = args.candidates or workspace.settings.review_candidate_limit
         if getattr(args, "first", None) is not None:
             if not 1 <= args.first <= 10000:
                 raise ValueError("--first debe estar entre 1 y 10000.")

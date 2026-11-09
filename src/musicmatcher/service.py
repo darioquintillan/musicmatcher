@@ -154,20 +154,30 @@ class Workspace:
             self.started = time.monotonic()
             state = self.state()
             selected_tracks = state["tracks"][:request["track_limit"]] if request.get("track_limit") else state["tracks"]
+            review_only = bool(request.get("review_only"))
+            if review_only:
+                if action != "search":
+                    raise ValueError("La ampliación de revisión solo se admite para búsquedas.")
+                selected_tracks = [track for track in selected_tracks
+                                   if track.get("match", {}).get("status") == "review"]
+            config = self.settings.model_copy(deep=True)
+            if review_only:
+                config = update_settings(config, {"candidate_limit": self.settings.review_candidate_limit})
+            if request.get("candidate_limit") is not None:
+                config = update_settings(config, {"candidate_limit": request["candidate_limit"]})
             if action in {"search", "download", "run"} and not state["tracks"] and not (
                 request.get("spotify_url") or request.get("content") is not None
             ):
                 raise ValueError("Importa primero una playlist de Spotify o un archivo CSV/JSON.")
             stage = "import" if action.startswith("import") else "search" if action in {"search", "run"} else "download"
             self.baseline = (sum(t.get("match", {}).get("status") in {"accepted", "review", "unmatched", "unavailable"}
-                                 for t in selected_tracks) if stage == "search" else 0)
+                                 for t in selected_tracks) if stage == "search" and not review_only else 0)
             self.job.update(status="running", stage=stage, done=self.baseline, total=len(selected_tracks),
                             message="Preparando el proceso…", current_title="", started_at=utc_now(),
                             elapsed_seconds=0, eta_seconds=None, error=None, candidate_done=0, candidate_total=0,
-                            candidate_limit=self.settings.candidate_limit,
+                            candidate_limit=config.candidate_limit, review_only=review_only,
                             track_limit=request.get("track_limit"), finished_at=None)
             atomic_json(self.data_dir / "job.json", self.job)
-            config = self.settings.model_copy(deep=True)
             self.thread = threading.Thread(target=self._work, args=(deepcopy(request), config), daemon=True,
                                            name="musicmatcher-worker")
             self.thread.start()
@@ -201,9 +211,31 @@ class Workspace:
                     from .youtube_search_agent import search_tracks
                     state = search_tracks(self.state_path, settings=settings, progress=self.progress,
                                           stop_event=self.stop_event, refresh=bool(request.get("refresh")),
+                                          **({"review_only": True} if request.get("review_only") else {}),
                                           **({"track_limit": request["track_limit"]} if request.get("track_limit") else {}))
-                    if state.get("search_summary", {}).get("paused"):
+                    summary_key = "review_search_summary" if request.get("review_only") else "search_summary"
+                    if state.get(summary_key, {}).get("paused"):
                         self.stop_event.set()
+                    selected = state["tracks"][:request["track_limit"]] if request.get("track_limit") else state["tracks"]
+                    if (not request.get("review_only") and not self.stop_event.is_set()
+                            and settings.review_candidate_limit > settings.candidate_limit
+                            and any(track.get("match", {}).get("status") == "review" for track in selected)):
+                        expanded = settings.model_copy(update={"candidate_limit": settings.review_candidate_limit})
+                        self.progress({"stage": "search", "done": 0,
+                                       "total": sum(t.get("match", {}).get("status") == "review" for t in selected),
+                                       "candidate_done": 0, "candidate_total": 0,
+                                       "candidate_limit": expanded.candidate_limit,
+                                       "message": "Primera pasada terminada. Ampliando las canciones por revisar."})
+                        with self.lock:
+                            self.job["review_only"] = True
+                            self.baseline = 0
+                            self.started = time.monotonic()
+                        self.record(f"Segunda pasada para revisión: hasta {expanded.candidate_limit} candidatos.")
+                        state = search_tracks(self.state_path, settings=expanded, progress=self.progress,
+                                              stop_event=self.stop_event, review_only=True,
+                                              **({"track_limit": request["track_limit"]} if request.get("track_limit") else {}))
+                        if state.get("review_search_summary", {}).get("paused"):
+                            self.stop_event.set()
                 if action in {"download", "run"} and not self.stop_event.is_set():
                     from .audio_downloader import download_tracks
                     export_results(self.state_path)
